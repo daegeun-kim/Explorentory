@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>LLM Geospatial</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link href="https://unpkg.com/maplibre-gl@^5.6.1/dist/maplibre-gl.css" rel="stylesheet" />
+</head>
+<body>
+  <div id="main-container">
+    <div id="single-map-container">
+        <div id="map"></div>
+    </div>
+    <div id="compare-map-container">
+        <div id="map-left"></div>
+        <div id="map-right"></div>
+    </div>
+    <div id="chart">
+      <div id="chart-placeholder">
+        <span id="title-placeholder">GeoEstateChat</span><br>
+        <pre>
+        <br>                      "search for the neighborhood with highest average building price"<br>
+                                                                                                                  "I want to live in the tallest place in brooklyn"<br>
+                                                        "which area has highest number of crime per population"<br><br>
+        </pre>
+      </div>
+      <div id="chart1"></div>
+      <div id="chart2"></div>
+    </div>
+  </div>
+  <div id="input-output">
+    <div id="message">
+      <div id="button-container">
+        <button id="reset">Reset</button>
+      </div>
+      <div id="output-message">
+        <div id="output-placeholder">
+          <div id="main-placeholder">Ask<br>About<br><br>building<br>Neighborhood<br>borough<br>and the city</div>
+        </div>
+      </div>
+      <form id="query-form">
+        <textarea id="query-input"></textarea>
+        <button id="query" type="submit">Query</button>
+      </form>
+    </div>
+  </div>
+  
+  <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="assets/js/chart2.js"></script>
+  <script src="assets/js/chart1.js"></script>
+  <script src="assets/js/map.js"></script>
+  <script src="assets/js/main.js"></script>
+</body>
+</html>
