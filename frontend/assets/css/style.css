@@ -50,34 +50,15 @@ body {
 }
 
 /* ------------- Map ------------- */
-#single-map-container,
-#compare-map-container {
+#single-map-container {
   width: 100%;
   flex: 3 1 0;
   min-height: 0;
-}
-
-#single-map-container {
   display: block;
-}
-
-#compare-map-container {
-  display: none;
-  flex-direction: row;
-  justify-content: space-between;
-  /* gap: 6px; */
 }
 
 #map {
   width: 100%;
-  height: 100%;
-  border: 1px solid rgb(75, 75, 75);
-  box-sizing: border-box;
-}
-
-#map-left,
-#map-right {
-  flex: 2 1 0;
   height: 100%;
   border: 1px solid rgb(75, 75, 75);
   box-sizing: border-box;
@@ -96,11 +77,6 @@ body {
   flex-direction: row;    /* side-by-side */
   gap: 16px;              /* optional spacing between charts */
 }
-#chart-placeholder pre{
-  color: rgb(165, 165, 165);
-  font-size: 20px;
-  font-family: "Roboto", sans-serif;
-}
 #title-placeholder {
   color: rgb(255, 255, 255);
   font-size: 100px;
@@ -108,11 +84,10 @@ body {
   font-weight: bold;
 }
 
-#chart1,
-#chart2 {
-  flex: 1 1 0;            /* each takes exactly half the space */
-  min-width: 0;           /* prevent overflow */
-  min-height: 0;          /* allow SVG inside to fit */
+#chart1 {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
 }
 
 /* ------------- input-output ------------- */
@@ -214,6 +189,361 @@ body {
   margin-left: 10px;
 }
 
+/* ------------- Preferences modal ------------- */
+#pref-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+#pref-modal {
+  background: rgb(20, 20, 24);
+  border: 1px solid rgb(75, 75, 75);
+  border-radius: 16px;
+  padding: 36px 40px;
+  width: 380px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  color: rgb(220, 220, 220);
+  font-family: "Roboto", sans-serif;
+}
+
+#pref-title {
+  font-size: 36px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1;
+}
+
+#pref-subtitle {
+  font-size: 14px;
+  color: rgb(145, 145, 145);
+  margin-top: -12px;
+}
+
+.pref-label {
+  display: block;
+  font-size: 13px;
+  color: rgb(160, 160, 160);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pref-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.pref-field-row {
+  display: flex;
+  gap: 16px;
+}
+
+.pref-field-row .pref-field {
+  flex: 1;
+}
+
+.pref-rent-display {
+  font-size: 28px;
+  font-weight: 700;
+  color: rgb(99, 173, 242);
+  margin-bottom: 6px;
+}
+
+#pref-rent {
+  width: 100%;
+  accent-color: rgb(99, 173, 242);
+  cursor: pointer;
+}
+
+.pref-rent-range {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: rgb(120, 120, 120);
+  margin-top: 4px;
+}
+
+.pref-number {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgb(35, 35, 40);
+  border: 1px solid rgb(75, 75, 75);
+  color: #fff;
+  font-size: 18px;
+  font-family: "Roboto", sans-serif;
+  box-sizing: border-box;
+}
+
+#pref-submit {
+  padding: 12px;
+  border-radius: 24px;
+  background: rgb(99, 173, 242);
+  border: none;
+  color: #000;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: "Roboto", sans-serif;
+  margin-top: 4px;
+}
+
+#pref-submit:hover {
+  background: rgb(130, 190, 255);
+}
+
+/* ------------- Priority ranking cards ------------- */
+#pref-priority-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.pref-priority-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  border-radius: 10px;
+  border: 1px solid rgb(75, 75, 75);
+  background: rgb(35, 35, 40);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.pref-priority-card:hover {
+  border-color: rgb(99, 173, 242);
+}
+
+.pref-priority-card.selected {
+  border-color: rgb(99, 173, 242);
+  background: rgb(28, 50, 75);
+}
+
+.pref-priority-rank {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid rgb(75, 75, 75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgb(99, 173, 242);
+  background: rgb(20, 20, 24);
+}
+
+.pref-priority-card.selected .pref-priority-rank {
+  border-color: rgb(99, 173, 242);
+  background: rgb(99, 173, 242);
+  color: #000;
+}
+
+.pref-priority-name {
+  font-size: 13px;
+  color: rgb(200, 200, 200);
+  text-align: center;
+}
+
+#pref-priority-hint {
+  font-size: 11px;
+  color: rgb(100, 100, 100);
+  margin-top: 6px;
+}
+
+/* ------------- Neighborhood selection panel ------------- */
+#neighborhood-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  height: 100%;
+}
+
+#neighborhood-header {
+  font-size: 18px;
+  font-weight: 700;
+  color: rgb(220, 220, 220);
+}
+
+#neighborhood-instruction {
+  font-size: 13px;
+  color: rgb(145, 145, 145);
+}
+
+#neighborhood-selected-display {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(28, 28, 33);
+  border: 1px solid rgb(55, 55, 60);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+#neighborhood-selected-label {
+  font-size: 22px;
+  font-weight: 700;
+  color: rgb(99, 173, 242);
+  text-align: center;
+}
+
+#neighborhood-confirm {
+  padding: 12px;
+  border-radius: 24px;
+  background: rgb(99, 173, 242);
+  border: none;
+  color: #000;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: "Roboto", sans-serif;
+  flex-shrink: 0;
+}
+
+#neighborhood-confirm:disabled {
+  background: rgb(55, 55, 62);
+  color: rgb(120, 120, 120);
+  cursor: default;
+}
+
+#neighborhood-confirm:not(:disabled):hover {
+  background: rgb(130, 190, 255);
+}
+
+/* ------------- Rating panel ------------- */
+#rating-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+}
+
+/* Progress line e.g. "Property 3 of 10" */
+#rating-progress {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgb(120, 120, 120);
+  flex-shrink: 0;
+}
+
+/* Card showing one property's info */
+#rating-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  background: rgb(28, 28, 33);
+  border: 1px solid rgb(55, 55, 60);
+  border-radius: 12px;
+  padding: 20px 18px;
+}
+
+#rating-neighborhood {
+  font-size: 18px;
+  font-weight: 700;
+  color: rgb(220, 220, 220);
+}
+
+#rating-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#rating-details span {
+  font-size: 13px;
+  color: rgb(160, 160, 160);
+  background: rgb(40, 40, 46);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+#rating-question {
+  font-size: 13px;
+  color: rgb(145, 145, 145);
+  margin-top: 6px;
+}
+
+#rating-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#rating-value {
+  width: 64px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgb(35, 35, 40);
+  border: 1px solid rgb(99, 173, 242);
+  color: #fff;
+  font-size: 22px;
+  font-family: "Roboto", sans-serif;
+  font-weight: 700;
+  text-align: center;
+}
+
+.rating-label {
+  font-size: 16px;
+  color: rgb(120, 120, 120);
+}
+
+/* Previous / Next navigation row */
+#rating-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+#rating-prev,
+#rating-next {
+  flex: 1;
+  padding: 10px;
+  border-radius: 20px;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: "Roboto", sans-serif;
+}
+
+#rating-prev {
+  background: rgb(55, 55, 62);
+  color: rgb(200, 200, 200);
+}
+
+#rating-prev:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+#rating-next {
+  background: rgb(99, 173, 242);
+  color: #000;
+}
+
+#rating-next:hover {
+  background: rgb(130, 190, 255);
+}
+
 /* ------------- responsive ------------- */
 @media (max-width: 900px) {
   body {
@@ -236,11 +566,5 @@ body {
 
   #chart {
     margin-top: 8px;
-  }
-
-  #buttons {
-    display: flex;
-    justify-content: space-between;
-    flex-wrap: wrap;
   }
 }

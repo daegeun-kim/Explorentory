@@ -1,340 +1,304 @@
+// map.js
+// MapLibre GL initialization and map rendering functions.
+
+//--------------------------------------------------------------------
+// Map instance
+//--------------------------------------------------------------------
 const map = new maplibregl.Map({
-        container: 'map',
-        style: 'assets/js/style.json',
-        center: [-74, 40.7],
-        zoom: 9.5
-    });
-
-const mapLeft = new maplibregl.Map({
-        container: 'map-left',
-        style: 'assets/js/style.json',
-        center: [-74, 40.7],
-        zoom: 9.5
-    });
-
-const mapRight = new maplibregl.Map({
-        container: 'map-right',
-        style: 'assets/js/style.json',
-        center: [-74, 40.7],
-        zoom: 9.5
-    });
-
-// map.scrollZoom.disable();
-// map.boxZoom.disable();
-// map.dragRotate.disable();
-// map.dragPan.disable();
-// map.keyboard.disable();
-// map.doubleClickZoom.disable();
-// map.touchZoomRotate.disable();
+  container: "map",
+  style:     "assets/js/style.json",
+  center:    [-74, 40.7],
+  zoom:      9.5,
+});
 
 window.map = map;
 
 //--------------------------------------------------------------------
-//---------------------- Map source / layer ids ----------------------
+// Source / layer ids — properties
 //--------------------------------------------------------------------
-const buildingsSourceId = "buildings";
-const buildingsLayerId = "buildings-fill";
-const leftSourceId = "buildings-left";
-const rightSourceId = "buildings-right";
-const leftLayerId = "buildings-fill-left";
-const rightLayerId = "buildings-fill-right";
+const propertiesSourceId = "properties";
+const propertiesFillId   = "properties-fill";
+const propertiesCircleId = "properties-circle";
 
 //--------------------------------------------------------------------
-//---------------------- Clear all map sources -----------------------
+// Source / layer ids — neighborhoods
+//--------------------------------------------------------------------
+const neighborhoodSourceId       = "neighborhoods";
+const neighborhoodFillId         = "neighborhoods-fill";
+const neighborhoodOutlineId      = "neighborhoods-outline";
+const neighborhoodSelectedSrcId  = "neighborhood-selected";
+const neighborhoodSelectedFillId = "neighborhood-selected-fill";
+
+// 3-stop choropleth gradient for recommendation scores (cold → hot)
+// Stops: min, median, max
+const CHOROPLETH_COLORS = ["#86d3ff", "#ffffbf", "#ff7b7b"];
+
+//--------------------------------------------------------------------
+// clearNeighborhoodLayer
+//--------------------------------------------------------------------
+function clearNeighborhoodLayer() {
+  [neighborhoodSelectedFillId, neighborhoodOutlineId, neighborhoodFillId].forEach(id => {
+    if (map.getLayer(id)) map.removeLayer(id);
+  });
+  [neighborhoodSelectedSrcId, neighborhoodSourceId].forEach(id => {
+    if (map.getSource(id)) map.removeSource(id);
+  });
+  map.getCanvas().style.cursor = "";
+}
+
+//--------------------------------------------------------------------
+// clearAllSources  (called from main.js on reset)
 //--------------------------------------------------------------------
 function clearAllSources() {
-  console.log("[map] clearAllSources called");
-  if (typeof map !== "undefined" && map && map.getSource(buildingsSourceId)) {
-    console.log("[map] clearing main map source/layer");
-    if (map.getLayer(buildingsLayerId)) map.removeLayer(buildingsLayerId);
-    map.removeSource(buildingsSourceId);
-  }
-  if (typeof mapLeft !== "undefined" && mapLeft && mapLeft.getSource(leftSourceId)) {
-    console.log("[map] clearing left map source/layer");
-    if (mapLeft.getLayer(leftLayerId)) mapLeft.removeLayer(leftLayerId);
-    mapLeft.removeSource(leftSourceId);
-  }
-  if (typeof mapRight !== "undefined" && mapRight && mapRight.getSource(rightSourceId)) {
-    console.log("[map] clearing right map source/layer");
-    if (mapRight.getLayer(rightLayerId)) mapRight.removeLayer(rightLayerId);
-    mapRight.removeSource(rightSourceId);
-  }
+  clearNeighborhoodLayer();
+  if (map.getLayer(propertiesFillId))   map.removeLayer(propertiesFillId);
+  if (map.getLayer(propertiesCircleId)) map.removeLayer(propertiesCircleId);
+  if (map.getSource(propertiesSourceId)) map.removeSource(propertiesSourceId);
 }
 
 //--------------------------------------------------------------------
-//------------------- Helper: stats for color ramp -------------------
+// Helper: detect geometry type from first feature
 //--------------------------------------------------------------------
-function getStats(geojsonObj, col) {
-  console.log("[stats] getStats called for column:", col);
-  const positiveValues = [];
-  for (const f of geojsonObj.features) {
-    const v = Number(f.properties[col]);
-    if (Number.isFinite(v) && v > 0) positiveValues.push(v);
-  }
-  console.log("[stats] positiveValues length:", positiveValues.length);
-  if (!positiveValues.length) return null;
-
-  positiveValues.sort((a, b) => a - b);
-
-  function percentile(p) {
-    const idx = (p / 100) * (positiveValues.length - 1);
-    const lo = Math.floor(idx);
-    const hi = Math.ceil(idx);
-    if (lo === hi) return positiveValues[lo];
-    const t = idx - lo;
-    return positiveValues[lo] * (1 - t) + positiveValues[hi] * t;
-  }
-
-  const result = {
-    min: positiveValues[0],
-    p20: percentile(20),
-    p35: percentile(35),
-    median: percentile(50),
-    p80: percentile(75),
-    p90: percentile(90),
-    p97: percentile(97),
-    max: positiveValues[positiveValues.length - 1]
-  };
-  console.log("[stats] computed stats:", result);
-  return result;
+function _isPolygon(geojsonObj) {
+  const type = geojsonObj.features?.[0]?.geometry?.type || "";
+  return type === "Polygon" || type === "MultiPolygon";
 }
 
 //--------------------------------------------------------------------
-//---------------------- Apply data: map -----------------------------
-//--------------------------------------------------------------------
-
-function applyDataSingle(geojsonObj, col, mode, dtype) {
-  console.log("[map] applyDataSingle", {
-    col,
-    mode,
-    dtype,
-    featureCount: geojsonObj && geojsonObj.features ? geojsonObj.features.length : 0
-  });
-
-  let fillColorExpr = "#555";
-
-  //------------------ ANALYZE or SEARCH + NUMERIC ------------------------
-  if ((mode === "analyze" || mode === "search") && dtype === "numeric") {
-    const stats = getStats(geojsonObj, col);
-
-    if (stats) {
-      console.log("[map] using numeric ramp with stats:", stats);
-      const rampExpr = [
-        "interpolate",
-        ["linear"],
-        ["get", col],
-        stats.min, "#ffffffff",
-        stats.p20, "#fffd6eff",
-        stats.p35, "#7dff7dff",
-        stats.median, "#60faffff",
-        stats.p80, "#39b0ffff",
-        stats.p90, "#215cffff",
-        stats.p97, "#9845ffff",
-        stats.max, "#da60ffff"
-      ];
-
-      fillColorExpr = [
-        "case",
-        ["==", ["get", col], 0],
-        "#757575ff",
-        rampExpr
-      ];
-    } else {
-      console.warn("[map] stats is null for numeric analyze, keeping default fillColorExpr");
-    }
-  }
-
-
-  //---------------- ANALYZE or SEARCH + CATEGORICAL ----------------------
-  if ((mode === "analyze" || mode === "search" ) && dtype === "categorical") {
-    console.log("[map] building categorical match expression");
-    const countsMap = new Map();
-    for (const f of geojsonObj.features || []) {
-      if (!f.properties) continue;
-      const v = f.properties[col];
-      if (v == null || v === "") continue;
-      countsMap.set(v, (countsMap.get(v) || 0) + 1);
-    }
-
-    const counts = Array.from(countsMap.entries()).sort((a, b) => b[1] - a[1]);
-    console.log("[map] category counts:", counts);
-
-    if (counts.length) {
-      const baseColors = [
-        "#ff7474ff",
-        "#55dce6ff",
-        "#3986ebff",
-        "#ddc763ff",
-        "#76df84ff",
-        "#7652b9ff",
-        "#a300eeff",
-        "#ff7a62ff",
-        "#f3e962ff",
-        "#00c896ff"
-      ];
-
-      const matchExpr = ["match", ["to-string", ["get", col]]];
-
-      counts.forEach((pair, i) => {
-        const cat = pair[0];
-        const key = String(cat);
-        let color;
-        if (i < baseColors.length) {
-          color = baseColors[i];
-        } else {
-          const r = Math.floor(Math.random() * 256).toString(16).padStart(2, "0");
-          const g = Math.floor(Math.random() * 256).toString(16).padStart(2, "0");
-          const b = Math.floor(Math.random() * 256).toString(16).padStart(2, "0");
-          color = `#${r}${g}${b}ff`;
-        }
-        matchExpr.push(key, color);
-      });
-
-      matchExpr.push("#757575ff");
-      fillColorExpr = matchExpr;
-    } else {
-      console.warn("[map] no categories found, keeping default fillColorExpr");
-    }
-  }
-
-
-  //---------------- APPLY SOURCE + LAYER -----------------------
-  if (map.getSource(buildingsSourceId)) {
-    console.log("[map] updating existing buildings source");
-    map.getSource(buildingsSourceId).setData(geojsonObj);
-    map.setPaintProperty(buildingsLayerId, "fill-color", fillColorExpr);
-  } else {
-    console.log("[map] adding new buildings source/layer");
-    map.addSource(buildingsSourceId, {
-      type: "geojson",
-      data: geojsonObj
-    });
-
-    map.addLayer({
-      id: buildingsLayerId,
-      type: "fill",
-      source: buildingsSourceId,
-      paint: {
-        "fill-color": fillColorExpr,
-        "fill-opacity": 0.7
-      }
-    });
-  }
-
-  //---------------------- FIT TO DATA ---------------------------
-  const bounds = getGeojsonBounds(geojsonObj);
-  console.log("[map] computed bounds:", bounds);
-  if (bounds) map.fitBounds(bounds, { padding: 20 });
-}
-
-//--------------------------------------------------------------------
-//---------------------- Apply data: compare maps --------------------
-//--------------------------------------------------------------------
-function applyDataCompare(geojsonLeftData, geojsonRightData, col, fillColorExpr) {
-  console.log("[compare] applyDataCompare entered", {
-    col,
-    leftFeatures: geojsonLeftData && geojsonLeftData.features ? geojsonLeftData.features.length : 0,
-    rightFeatures: geojsonRightData && geojsonRightData.features ? geojsonRightData.features.length : 0,
-    hasMapLeft: typeof mapLeft !== "undefined" && !!mapLeft,
-    hasMapRight: typeof mapRight !== "undefined" && !!mapRight
-  });
-
-  if (!mapLeft || !mapRight) {
-    console.warn("[compare] mapLeft or mapRight missing");
-    return;
-  }
-
-  if (mapLeft.getSource(leftSourceId)) {
-    console.log("[compare] updating left source");
-    mapLeft.getSource(leftSourceId).setData(geojsonLeftData);
-    mapLeft.setPaintProperty(leftLayerId, "fill-color", fillColorExpr);
-  } else {
-    console.log("[compare] adding left source/layer");
-    mapLeft.addSource(leftSourceId, {
-      type: "geojson",
-      data: geojsonLeftData
-    });
-    mapLeft.addLayer({
-      id: leftLayerId,
-      type: "fill",
-      source: leftSourceId,
-      paint: {
-        "fill-color": fillColorExpr,
-        "fill-opacity": 0.7
-      }
-    });
-  }
-
-  if (mapRight.getSource(rightSourceId)) {
-    console.log("[compare] updating right source");
-    mapRight.getSource(rightSourceId).setData(geojsonRightData);
-    mapRight.setPaintProperty(rightLayerId, "fill-color", fillColorExpr);
-  } else {
-    console.log("[compare] adding right source/layer");
-    mapRight.addSource(rightSourceId, {
-      type: "geojson",
-      data: geojsonRightData
-    });
-    mapRight.addLayer({
-      id: rightLayerId,
-      type: "fill",
-      source: rightSourceId,
-      paint: {
-        "fill-color": fillColorExpr,
-        "fill-opacity": 0.7
-      }
-    });
-  }
-
-  const boundsLeft = getGeojsonBounds(geojsonLeftData);
-  const boundsRight = getGeojsonBounds(geojsonRightData);
-  console.log("[compare] boundsLeft:", boundsLeft, "boundsRight:", boundsRight);
-
-  if (boundsLeft) mapLeft.fitBounds(boundsLeft, { padding: 20 });
-  if (boundsRight) mapRight.fitBounds(boundsRight, { padding: 20 });
-}
-
-
-
-//--------------------------------------------------------------------
-//---------------------- Helper: GeoJSON bounds ----------------------
+// Helper: compute GeoJSON bounding box
 //--------------------------------------------------------------------
 function getGeojsonBounds(geojsonObj) {
-  console.log("[bounds] getGeojsonBounds called");
-  if (!geojsonObj || !geojsonObj.features || !geojsonObj.features.length) {
-    console.warn("[bounds] invalid or empty geojsonObj");
-    return null;
-  }
+  if (!geojsonObj?.features?.length) return null;
 
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
   function extend(coords) {
     for (const c of coords) {
-      if (Array.isArray(c[0])) {
-        extend(c);
-      } else {
-        const x = c[0];
-        const y = c[1];
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
-      }
+      if (Array.isArray(c[0])) { extend(c); continue; }
+      if (c[0] < minX) minX = c[0];
+      if (c[1] < minY) minY = c[1];
+      if (c[0] > maxX) maxX = c[0];
+      if (c[1] > maxY) maxY = c[1];
     }
   }
 
   for (const f of geojsonObj.features) {
-    if (f.geometry && f.geometry.coordinates) extend(f.geometry.coordinates);
+    if (f.geometry?.coordinates) extend(f.geometry.coordinates);
   }
 
-  if (minX === Infinity) {
-    console.warn("[bounds] no valid coordinates found");
-    return null;
-  }
-  const result = [[minX, minY], [maxX, maxY]];
-  console.log("[bounds] computed bounds:", result);
-  return result;
+  return minX === Infinity ? null : [[minX, minY], [maxX, maxY]];
 }
+
+//--------------------------------------------------------------------
+// Helper: compute 3-quantile stops (min, median, max) from a column
+//--------------------------------------------------------------------
+function _getQuantiles(geojsonObj, col) {
+  const vals = geojsonObj.features
+    .map(f => Number(f.properties[col]))
+    .filter(v => Number.isFinite(v));
+
+  if (!vals.length) return null;
+  vals.sort((a, b) => a - b);
+
+  const median = (() => {
+    const idx = 0.5 * (vals.length - 1);
+    const lo  = Math.floor(idx);
+    const hi  = Math.ceil(idx);
+    return lo === hi ? vals[lo] : vals[lo] * (1 - (idx - lo)) + vals[hi] * (idx - lo);
+  })();
+
+  let min = vals[0];
+  let max = vals[vals.length - 1];
+
+  // Guard: interpolate requires strictly ascending input values.
+  let med = median;
+  if (med <= min) med = min + 1e-9;
+  if (max <= med) max = med + 1e-9;
+
+  return { min, median: med, max };
+}
+
+//--------------------------------------------------------------------
+// Internal: clear old property layers/source, add fresh source + layer
+//--------------------------------------------------------------------
+function _applyLayer(geojsonObj, colorExpr, fitPadding) {
+  const applyFn = () => {
+    // Clear only property layers (not neighborhood layers)
+    if (map.getLayer(propertiesFillId))   map.removeLayer(propertiesFillId);
+    if (map.getLayer(propertiesCircleId)) map.removeLayer(propertiesCircleId);
+    if (map.getSource(propertiesSourceId)) map.removeSource(propertiesSourceId);
+
+    map.addSource(propertiesSourceId, { type: "geojson", data: geojsonObj });
+
+    if (_isPolygon(geojsonObj)) {
+      map.addLayer({
+        id:     propertiesFillId,
+        type:   "fill",
+        source: propertiesSourceId,
+        paint: {
+          "fill-color":         colorExpr,
+          "fill-opacity":       0.85,
+          "fill-outline-color": "#ffffff",
+        },
+      });
+    } else {
+      map.addLayer({
+        id:     propertiesCircleId,
+        type:   "circle",
+        source: propertiesSourceId,
+        paint: {
+          "circle-radius":       7,
+          "circle-color":        colorExpr,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 1.5,
+          "circle-opacity":      0.9,
+        },
+      });
+    }
+
+    const bounds = getGeojsonBounds(geojsonObj);
+    if (bounds) map.fitBounds(bounds, { padding: fitPadding });
+  };
+
+  if (!map.isStyleLoaded()) {
+    map.once("load", applyFn);
+  } else {
+    applyFn();
+  }
+}
+
+//--------------------------------------------------------------------
+// showNeighborhoodsOnMap  – display all neighborhoods for selection
+//--------------------------------------------------------------------
+function showNeighborhoodsOnMap(geojson) {
+  const applyFn = () => {
+    clearNeighborhoodLayer();
+
+    map.addSource(neighborhoodSourceId, { type: "geojson", data: geojson });
+
+    // Subtle fill makes polygons clickable
+    map.addLayer({
+      id:     neighborhoodFillId,
+      type:   "fill",
+      source: neighborhoodSourceId,
+      paint: {
+        "fill-color":   "#63adf2",
+        "fill-opacity": 0.06,
+      },
+    });
+
+    // Visible boundary outlines
+    map.addLayer({
+      id:     neighborhoodOutlineId,
+      type:   "line",
+      source: neighborhoodSourceId,
+      paint: {
+        "line-color":   "#63adf2",
+        "line-width":   1.2,
+        "line-opacity": 0.75,
+      },
+    });
+
+    // Click: highlight selected neighborhood and notify neighborhood.js
+    map.on("click", neighborhoodFillId, (e) => {
+      const feature = e.features[0];
+      if (!feature) return;
+
+      const name = feature.properties.small_n
+        || feature.properties.name
+        || feature.properties.ntaname
+        || "Unknown";
+
+      const lon = feature.properties.centroid_lon;
+      const lat = feature.properties.centroid_lat;
+
+      // Replace previous selection highlight
+      if (map.getLayer(neighborhoodSelectedFillId)) map.removeLayer(neighborhoodSelectedFillId);
+      if (map.getSource(neighborhoodSelectedSrcId))  map.removeSource(neighborhoodSelectedSrcId);
+
+      map.addSource(neighborhoodSelectedSrcId, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [feature] },
+      });
+      map.addLayer({
+        id:     neighborhoodSelectedFillId,
+        type:   "fill",
+        source: neighborhoodSelectedSrcId,
+        paint: {
+          "fill-color":   "#63adf2",
+          "fill-opacity": 0.4,
+        },
+      });
+
+      if (typeof window.onNeighborhoodClick === "function") {
+        window.onNeighborhoodClick(name, lon, lat);
+      }
+    });
+
+    map.on("mouseenter", neighborhoodFillId, () => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+    map.on("mouseleave", neighborhoodFillId, () => {
+      map.getCanvas().style.cursor = "";
+    });
+
+    const bounds = getGeojsonBounds(geojson);
+    if (bounds) map.fitBounds(bounds, { padding: 40 });
+  };
+
+  if (!map.isStyleLoaded()) {
+    map.once("load", applyFn);
+  } else {
+    applyFn();
+  }
+}
+
+//--------------------------------------------------------------------
+// showSinglePropertyOnMap  – one property during the rating step
+//--------------------------------------------------------------------
+function showSinglePropertyOnMap(property) {
+  const geojson = {
+    type:     "FeatureCollection",
+    features: [{
+      type:     "Feature",
+      geometry: property.geom,
+      properties: {
+        rent_knn:    property.rent_knn,
+        sqft:        property.sqft,
+        bedroomnum:  property.bedroomnum,
+        bathroomnum: property.bathroomnum,
+        small_n:     property.small_n,
+      },
+    }],
+  };
+
+  _applyLayer(geojson, "#63adf2", 120);
+}
+
+//--------------------------------------------------------------------
+// showRecommendationsOnMap  – top 1000, 3-stop choropleth by score
+//--------------------------------------------------------------------
+function showRecommendationsOnMap(geojson) {
+  const q = _getQuantiles(geojson, "predicted_score");
+
+  let colorExpr = CHOROPLETH_COLORS[1];
+  if (q) {
+    colorExpr = [
+      "interpolate", ["linear"], ["get", "predicted_score"],
+      q.min,    CHOROPLETH_COLORS[0],
+      q.median, CHOROPLETH_COLORS[1],
+      q.max,    CHOROPLETH_COLORS[2],
+    ];
+  }
+
+  _applyLayer(geojson, colorExpr, 40);
+}
+
+//--------------------------------------------------------------------
+// Expose to other scripts
+//--------------------------------------------------------------------
+window.showNeighborhoodsOnMap   = showNeighborhoodsOnMap;
+window.clearNeighborhoodLayer   = clearNeighborhoodLayer;
+window.showSinglePropertyOnMap  = showSinglePropertyOnMap;
+window.showRecommendationsOnMap = showRecommendationsOnMap;
+window.clearAllSources          = clearAllSources;
