@@ -1,6 +1,22 @@
 // preferences.js
 // Popup modal to collect rent, bedroom, bathroom preferences, and priority order.
 
+//--------------------------------------------------------------------
+// Configuration
+//--------------------------------------------------------------------
+
+const RENT_MIN      = 1500;
+const RENT_MAX      = 10000;
+const RENT_STEP     = 50;
+const RENT_DEFAULT  = 3000;
+
+const ROOM_MIN          = 0;
+const ROOM_MAX          = 10;
+const BEDROOMS_DEFAULT  = 1;
+const BATHROOMS_DEFAULT = 1;
+
+//--------------------------------------------------------------------
+
 (function () {
   // ---- Build overlay ----
   const overlay = document.createElement("div");
@@ -15,19 +31,19 @@
 
     <div class="pref-field">
       <label class="pref-label">Monthly Rent</label>
-      <div class="pref-rent-display">$<span id="pref-rent-value">3,000</span></div>
-      <input type="range" id="pref-rent" min="1500" max="10000" step="50" value="3000">
-      <div class="pref-rent-range"><span>$1,500</span><span>$10,000</span></div>
+      <div class="pref-rent-display">$<span id="pref-rent-value">${RENT_DEFAULT.toLocaleString()}</span></div>
+      <input type="range" id="pref-rent" min="${RENT_MIN}" max="${RENT_MAX}" step="${RENT_STEP}" value="${RENT_DEFAULT}">
+      <div class="pref-rent-range"><span>$${RENT_MIN.toLocaleString()}</span><span>$${RENT_MAX.toLocaleString()}</span></div>
     </div>
 
     <div class="pref-field-row">
       <div class="pref-field">
         <label class="pref-label">Bedrooms</label>
-        <input type="number" class="pref-number" id="pref-bedrooms" min="0" max="10" value="1">
+        <input type="number" class="pref-number" id="pref-bedrooms" min="${ROOM_MIN}" max="${ROOM_MAX}" value="${BEDROOMS_DEFAULT}">
       </div>
       <div class="pref-field">
         <label class="pref-label">Bathrooms</label>
-        <input type="number" class="pref-number" id="pref-bathrooms" min="0" max="10" value="1">
+        <input type="number" class="pref-number" id="pref-bathrooms" min="${ROOM_MIN}" max="${ROOM_MAX}" value="${BATHROOMS_DEFAULT}">
       </div>
     </div>
 
@@ -67,13 +83,13 @@
   // ---- Priority ranking logic ----
   let priorityOrder = []; // e.g. ["rent", "location", "sqft"] in order clicked
 
-  const cards      = modal.querySelectorAll(".pref-priority-card");
-  const submitBtn  = document.getElementById("pref-submit");
+  const cards     = modal.querySelectorAll(".pref-priority-card");
+  const submitBtn = document.getElementById("pref-submit");
 
   function refreshCards() {
     cards.forEach((card) => {
-      const key  = card.dataset.key;
-      const rank = priorityOrder.indexOf(key); // -1 if not selected
+      const key    = card.dataset.key;
+      const rank   = priorityOrder.indexOf(key); // -1 if not selected
       const rankEl = card.querySelector(".pref-priority-rank");
 
       if (rank === -1) {
@@ -112,8 +128,8 @@
   // ---- Submit ----
   submitBtn.addEventListener("click", () => {
     const rent      = Number(rentSlider.value);
-    const bedrooms  = Math.max(0, Number(document.getElementById("pref-bedrooms").value));
-    const bathrooms = Math.max(0, Number(document.getElementById("pref-bathrooms").value));
+    const bedrooms  = Math.max(ROOM_MIN, Number(document.getElementById("pref-bedrooms").value));
+    const bathrooms = Math.max(ROOM_MIN, Number(document.getElementById("pref-bathrooms").value));
 
     overlay.style.display = "none";
 

@@ -1,7 +1,17 @@
 // rating.js
-// Shows 10 sample properties one at a time for user rating.
+// Shows sample properties one at a time for user rating.
 // Calls window.showSinglePropertyOnMap() for each property and
 // window.onRatingsSubmit() when all ratings are collected.
+
+//--------------------------------------------------------------------
+// Configuration
+//--------------------------------------------------------------------
+
+const RATING_DEFAULT = 5;
+const RATING_MIN     = 0;
+const RATING_MAX     = 10;
+
+//--------------------------------------------------------------------
 
 let _properties = [];
 let _ratings    = [];   // stores rating value per property index
@@ -12,7 +22,7 @@ let _currentIdx = 0;
 //--------------------------------------------------------------------
 function showRatingPanel(properties) {
   _properties = properties;
-  _ratings    = properties.map(() => 5);  // default rating: 5
+  _ratings    = properties.map(() => RATING_DEFAULT);
   _currentIdx = 0;
 
   _buildPanel();
@@ -37,8 +47,8 @@ function _buildPanel() {
       <div id="rating-details"></div>
       <div id="rating-question">How much do you like this property?</div>
       <div id="rating-input-row">
-        <input type="number" id="rating-value" min="0" max="10" step="1" value="5">
-        <span class="rating-label">&nbsp;/ 10</span>
+        <input type="number" id="rating-value" min="${RATING_MIN}" max="${RATING_MAX}" step="1" value="${RATING_DEFAULT}">
+        <span class="rating-label">&nbsp;/ ${RATING_MAX}</span>
       </div>
     </div>
     <div id="rating-nav">
@@ -133,8 +143,8 @@ function _onNext() {
 // Save the current input value into _ratings
 //--------------------------------------------------------------------
 function _saveCurrentRating() {
-  const raw    = Number(document.getElementById("rating-value")?.value);
-  _ratings[_currentIdx] = Math.min(10, Math.max(0, isNaN(raw) ? 5 : raw));
+  const raw = Number(document.getElementById("rating-value")?.value);
+  _ratings[_currentIdx] = Math.min(RATING_MAX, Math.max(RATING_MIN, isNaN(raw) ? RATING_DEFAULT : raw));
 }
 
 window.showRatingPanel = showRatingPanel;

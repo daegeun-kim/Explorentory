@@ -2,23 +2,83 @@
 // MapLibre GL initialization and map rendering functions.
 
 //--------------------------------------------------------------------
+// Configuration
+//--------------------------------------------------------------------
+
+// Initial map view
+const MAP_CENTER = [-74, 40.7];
+const MAP_ZOOM   = 9.5;
+
+// GeoJSON property used for choropleth coloring on recommendations
+const SCORE_PROPERTY = "final_score";
+
+// 3-stop choropleth gradient (min → median → max score)
+const CHOROPLETH_COLORS = ["#00a2ff", "#ffffbf", "#ff0000"];
+
+// Epsilon to guarantee strictly ascending interpolate stops
+const CHOROPLETH_EPSILON = 1e-9;
+
+// fitBounds padding (px) for each view
+const FIT_PADDING_SINGLE          = 120;  // one property during rating
+const FIT_PADDING_NEIGHBORHOODS   = 40;   // all neighborhoods
+const FIT_PADDING_RECOMMENDATIONS = 40;   // top-N results
+
+// Property layer paint values
+const PROP_FILL_OPACITY         = 1;
+const PROP_FILL_OUTLINE_COLOR   = "#ffffff";
+const PROP_CIRCLE_RADIUS        = 3;
+const PROP_CIRCLE_STROKE_COLOR  = "#ffffff";
+const PROP_CIRCLE_STROKE_WIDTH  = 1.5;
+const PROP_CIRCLE_OPACITY       = 0.9;
+
+// Neighborhood layer paint values
+const NEIGHBORHOOD_COLOR                  = "#63adf2";
+const NEIGHBORHOOD_FILL_OPACITY           = 0.06;
+const NEIGHBORHOOD_LINE_WIDTH             = 1.2;
+const NEIGHBORHOOD_LINE_OPACITY           = 0.75;
+const NEIGHBORHOOD_SELECTED_FILL_OPACITY  = 0.4;
+
+// Single-property highlight color (rating step)
+const SINGLE_PROP_COLOR = "#63adf2";
+
+// Zoom level at which recommendations switch from circles (zoomed out)
+// to polygon fills (zoomed in)
+const RECOMMENDATIONS_POLYGON_MIN_ZOOM = 12;
+
+// Fields shown in the hover tooltip for recommendation properties
+// (in display order; keys must match GeoJSON property names from nyc_units)
+const TOOLTIP_FIELDS = [
+  { key: "rent_knn",      label: "Rent" },
+  { key: "sqft",          label: "Sqft" },
+  { key: "livingroomnum", label: "Living Rooms" },
+  { key: "bedroomnum",    label: "Bedrooms" },
+  { key: "bathroomnum",   label: "Bathrooms" },
+  { key: "built_year",    label: "Built Year" },
+  { key: "bld_story",     label: "Stories" },
+];
+
+//--------------------------------------------------------------------
 // Map instance
 //--------------------------------------------------------------------
 const map = new maplibregl.Map({
   container: "map",
   style:     "assets/js/style.json",
-  center:    [-74, 40.7],
-  zoom:      9.5,
+  center:    MAP_CENTER,
+  zoom:      MAP_ZOOM,
 });
 
 window.map = map;
 
+// Shared hover popup instance for recommendation tooltips
+let _hoverPopup = null;
+
 //--------------------------------------------------------------------
 // Source / layer ids — properties
 //--------------------------------------------------------------------
-const propertiesSourceId = "properties";
-const propertiesFillId   = "properties-fill";
-const propertiesCircleId = "properties-circle";
+const propertiesSourceId       = "properties";
+const propertiesFillId         = "properties-fill";
+const propertiesCircleId       = "properties-circle";
+const recommendationsPointSrcId = "recommendations-points";
 
 //--------------------------------------------------------------------
 // Source / layer ids — neighborhoods
@@ -28,10 +88,6 @@ const neighborhoodFillId         = "neighborhoods-fill";
 const neighborhoodOutlineId      = "neighborhoods-outline";
 const neighborhoodSelectedSrcId  = "neighborhood-selected";
 const neighborhoodSelectedFillId = "neighborhood-selected-fill";
-
-// 3-stop choropleth gradient for recommendation scores (cold → hot)
-// Stops: min, median, max
-const CHOROPLETH_COLORS = ["#86d3ff", "#ffffbf", "#ff7b7b"];
 
 //--------------------------------------------------------------------
 // clearNeighborhoodLayer
@@ -51,9 +107,11 @@ function clearNeighborhoodLayer() {
 //--------------------------------------------------------------------
 function clearAllSources() {
   clearNeighborhoodLayer();
-  if (map.getLayer(propertiesFillId))   map.removeLayer(propertiesFillId);
-  if (map.getLayer(propertiesCircleId)) map.removeLayer(propertiesCircleId);
+  if (map.getLayer(propertiesFillId))    map.removeLayer(propertiesFillId);
+  if (map.getLayer(propertiesCircleId))  map.removeLayer(propertiesCircleId);
   if (map.getSource(propertiesSourceId)) map.removeSource(propertiesSourceId);
+  if (map.getSource(recommendationsPointSrcId)) map.removeSource(recommendationsPointSrcId);
+  if (_hoverPopup) { _hoverPopup.remove(); _hoverPopup = null; }
 }
 
 //--------------------------------------------------------------------
@@ -112,8 +170,8 @@ function _getQuantiles(geojsonObj, col) {
 
   // Guard: interpolate requires strictly ascending input values.
   let med = median;
-  if (med <= min) med = min + 1e-9;
-  if (max <= med) max = med + 1e-9;
+  if (med <= min) med = min + CHOROPLETH_EPSILON;
+  if (max <= med) max = med + CHOROPLETH_EPSILON;
 
   return { min, median: med, max };
 }
@@ -137,8 +195,8 @@ function _applyLayer(geojsonObj, colorExpr, fitPadding) {
         source: propertiesSourceId,
         paint: {
           "fill-color":         colorExpr,
-          "fill-opacity":       0.85,
-          "fill-outline-color": "#ffffff",
+          "fill-opacity":       PROP_FILL_OPACITY,
+          "fill-outline-color": PROP_FILL_OUTLINE_COLOR,
         },
       });
     } else {
@@ -147,11 +205,11 @@ function _applyLayer(geojsonObj, colorExpr, fitPadding) {
         type:   "circle",
         source: propertiesSourceId,
         paint: {
-          "circle-radius":       7,
+          "circle-radius":       PROP_CIRCLE_RADIUS,
           "circle-color":        colorExpr,
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 1.5,
-          "circle-opacity":      0.9,
+          "circle-stroke-color": PROP_CIRCLE_STROKE_COLOR,
+          "circle-stroke-width": PROP_CIRCLE_STROKE_WIDTH,
+          "circle-opacity":      PROP_CIRCLE_OPACITY,
         },
       });
     }
@@ -182,8 +240,8 @@ function showNeighborhoodsOnMap(geojson) {
       type:   "fill",
       source: neighborhoodSourceId,
       paint: {
-        "fill-color":   "#63adf2",
-        "fill-opacity": 0.06,
+        "fill-color":   NEIGHBORHOOD_COLOR,
+        "fill-opacity": NEIGHBORHOOD_FILL_OPACITY,
       },
     });
 
@@ -193,9 +251,9 @@ function showNeighborhoodsOnMap(geojson) {
       type:   "line",
       source: neighborhoodSourceId,
       paint: {
-        "line-color":   "#63adf2",
-        "line-width":   1.2,
-        "line-opacity": 0.75,
+        "line-color":   NEIGHBORHOOD_COLOR,
+        "line-width":   NEIGHBORHOOD_LINE_WIDTH,
+        "line-opacity": NEIGHBORHOOD_LINE_OPACITY,
       },
     });
 
@@ -209,8 +267,9 @@ function showNeighborhoodsOnMap(geojson) {
         || feature.properties.ntaname
         || "Unknown";
 
-      const lon = feature.properties.centroid_lon;
-      const lat = feature.properties.centroid_lat;
+      const lon      = feature.properties.centroid_lon;
+      const lat      = feature.properties.centroid_lat;
+      const borocode = feature.properties.borocode;
 
       // Replace previous selection highlight
       if (map.getLayer(neighborhoodSelectedFillId)) map.removeLayer(neighborhoodSelectedFillId);
@@ -225,13 +284,13 @@ function showNeighborhoodsOnMap(geojson) {
         type:   "fill",
         source: neighborhoodSelectedSrcId,
         paint: {
-          "fill-color":   "#63adf2",
-          "fill-opacity": 0.4,
+          "fill-color":   NEIGHBORHOOD_COLOR,
+          "fill-opacity": NEIGHBORHOOD_SELECTED_FILL_OPACITY,
         },
       });
 
       if (typeof window.onNeighborhoodClick === "function") {
-        window.onNeighborhoodClick(name, lon, lat);
+        window.onNeighborhoodClick(name, lon, lat, borocode);
       }
     });
 
@@ -243,7 +302,7 @@ function showNeighborhoodsOnMap(geojson) {
     });
 
     const bounds = getGeojsonBounds(geojson);
-    if (bounds) map.fitBounds(bounds, { padding: 40 });
+    if (bounds) map.fitBounds(bounds, { padding: FIT_PADDING_NEIGHBORHOODS });
   };
 
   if (!map.isStyleLoaded()) {
@@ -272,26 +331,167 @@ function showSinglePropertyOnMap(property) {
     }],
   };
 
-  _applyLayer(geojson, "#63adf2", 120);
+  _applyLayer(geojson, SINGLE_PROP_COLOR, FIT_PADDING_SINGLE);
 }
 
 //--------------------------------------------------------------------
-// showRecommendationsOnMap  – top 1000, 3-stop choropleth by score
+// Hover tooltip helpers for recommendation properties
+//--------------------------------------------------------------------
+function _buildTooltipHTML(props) {
+  const rows = TOOLTIP_FIELDS.map(({ key, label }) => {
+    const raw = props[key];
+    let display = "—";
+    if (raw != null && raw !== "" && raw !== 0) {
+      if (key === "rent_knn") {
+        display = `$${Math.round(raw).toLocaleString()}/mo`;
+      } else if (key === "sqft") {
+        display = `${Math.round(raw).toLocaleString()} sqft`;
+      } else {
+        display = raw;
+      }
+    }
+    return `<tr><td class="tt-label">${label}</td><td class="tt-value">${display}</td></tr>`;
+  }).join("");
+  return `<table class="prop-tooltip">${rows}</table>`;
+}
+
+function _attachHoverTooltip(layerId) {
+  map.on("mousemove", layerId, (e) => {
+    if (!e.features.length) return;
+    map.getCanvas().style.cursor = "pointer";
+
+    if (!_hoverPopup) {
+      _hoverPopup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        maxWidth:     "220px",
+        offset:       12,
+      });
+    }
+    _hoverPopup
+      .setLngLat(e.lngLat)
+      .setHTML(_buildTooltipHTML(e.features[0].properties))
+      .addTo(map);
+  });
+
+  map.on("mouseleave", layerId, () => {
+    map.getCanvas().style.cursor = "";
+    if (_hoverPopup) { _hoverPopup.remove(); _hoverPopup = null; }
+  });
+}
+
+//--------------------------------------------------------------------
+// Helper: build a Point GeoJSON from centroid_lon/lat properties
+// Used so MapLibre can render circles on polygon-geometry data
+//--------------------------------------------------------------------
+function _polygonsToPoints(geojsonObj) {
+  return {
+    type: "FeatureCollection",
+    features: geojsonObj.features
+      .filter(f => f.properties.centroid_lon != null && f.properties.centroid_lat != null)
+      .map(f => ({
+        ...f,
+        geometry: {
+          type:        "Point",
+          coordinates: [f.properties.centroid_lon, f.properties.centroid_lat],
+        },
+      })),
+  };
+}
+
+//--------------------------------------------------------------------
+// Internal: add dual layers for recommendations
+//   zoom <  RECOMMENDATIONS_POLYGON_MIN_ZOOM → circles (point source)
+//   zoom >= RECOMMENDATIONS_POLYGON_MIN_ZOOM → polygon fills
+// Border color matches the choropleth fill color on both layer types.
+//--------------------------------------------------------------------
+function _applyRecommendationLayers(geojsonObj, colorExpr, fitPadding) {
+  const applyFn = () => {
+    // Remove stale popup before rebuilding layers
+    if (_hoverPopup) { _hoverPopup.remove(); _hoverPopup = null; }
+
+    if (map.getLayer(propertiesFillId))   map.removeLayer(propertiesFillId);
+    if (map.getLayer(propertiesCircleId)) map.removeLayer(propertiesCircleId);
+    if (map.getSource(propertiesSourceId))        map.removeSource(propertiesSourceId);
+    if (map.getSource(recommendationsPointSrcId)) map.removeSource(recommendationsPointSrcId);
+
+    // Polygon source (for fill layer at high zoom)
+    map.addSource(propertiesSourceId, { type: "geojson", data: geojsonObj });
+
+    // Point source derived from centroid properties (for circle layer at low zoom)
+    map.addSource(recommendationsPointSrcId, {
+      type: "geojson",
+      data: _polygonsToPoints(geojsonObj),
+    });
+
+    // Fill layer — visible only when zoomed IN
+    // fill-sort-key: higher final_score rendered on top
+    map.addLayer({
+      id:      propertiesFillId,
+      type:    "fill",
+      source:  propertiesSourceId,
+      minzoom: RECOMMENDATIONS_POLYGON_MIN_ZOOM,
+      layout: {
+        "fill-sort-key": ["get", SCORE_PROPERTY],
+      },
+      paint: {
+        "fill-color":         colorExpr,
+        "fill-opacity":       PROP_FILL_OPACITY,
+        "fill-outline-color": colorExpr,  // border matches fill
+      },
+    });
+
+    // Circle layer — visible only when zoomed OUT
+    // circle-sort-key: higher final_score drawn on top (painted last)
+    map.addLayer({
+      id:      propertiesCircleId,
+      type:    "circle",
+      source:  recommendationsPointSrcId,
+      maxzoom: RECOMMENDATIONS_POLYGON_MIN_ZOOM,
+      layout: {
+        "circle-sort-key": ["get", SCORE_PROPERTY],
+      },
+      paint: {
+        "circle-radius":       PROP_CIRCLE_RADIUS,
+        "circle-color":        colorExpr,
+        "circle-stroke-color": colorExpr,  // border matches fill
+        "circle-stroke-width": PROP_CIRCLE_STROKE_WIDTH,
+        "circle-opacity":      PROP_CIRCLE_OPACITY,
+      },
+    });
+
+    // Attach hover tooltips to both layers
+    _attachHoverTooltip(propertiesFillId);
+    _attachHoverTooltip(propertiesCircleId);
+
+    const bounds = getGeojsonBounds(geojsonObj);
+    if (bounds) map.fitBounds(bounds, { padding: fitPadding });
+  };
+
+  if (!map.isStyleLoaded()) {
+    map.once("load", applyFn);
+  } else {
+    applyFn();
+  }
+}
+
+//--------------------------------------------------------------------
+// showRecommendationsOnMap  – top results, 3-stop choropleth by score
 //--------------------------------------------------------------------
 function showRecommendationsOnMap(geojson) {
-  const q = _getQuantiles(geojson, "predicted_score");
+  const q = _getQuantiles(geojson, SCORE_PROPERTY);
 
   let colorExpr = CHOROPLETH_COLORS[1];
   if (q) {
     colorExpr = [
-      "interpolate", ["linear"], ["get", "predicted_score"],
+      "interpolate", ["linear"], ["get", SCORE_PROPERTY],
       q.min,    CHOROPLETH_COLORS[0],
       q.median, CHOROPLETH_COLORS[1],
       q.max,    CHOROPLETH_COLORS[2],
     ];
   }
 
-  _applyLayer(geojson, colorExpr, 40);
+  _applyRecommendationLayers(geojson, colorExpr, FIT_PADDING_RECOMMENDATIONS);
 }
 
 //--------------------------------------------------------------------

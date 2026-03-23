@@ -1,6 +1,17 @@
 import numpy as np
 import lightgbm as lgb
 
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+N_ESTIMATORS     = 100   # number of boosting rounds
+NUM_LEAVES       = 15    # max leaves per tree
+MIN_CHILD_SAMPLES = 1    # minimum samples in a leaf (low because training set is only ~10)
+VERBOSE          = -1    # suppress LightGBM training output
+
+# ---------------------------------------------------------------------------
+
 
 def train_and_predict(X_train: np.ndarray, y_train: np.ndarray, X_all: np.ndarray) -> np.ndarray:
     """
@@ -20,10 +31,10 @@ def train_and_predict(X_train: np.ndarray, y_train: np.ndarray, X_all: np.ndarra
     print(f"[lgbm] training set shape: {X_train.shape}  y_train: {y_train.tolist()}")
 
     model = lgb.LGBMRegressor(
-        n_estimators=100,
-        num_leaves=15,
-        min_child_samples=1,
-        verbose=-1,
+        n_estimators=N_ESTIMATORS,
+        num_leaves=NUM_LEAVES,
+        min_child_samples=MIN_CHILD_SAMPLES,
+        verbose=VERBOSE,
     )
     model.fit(X_train, y_train)
     print("[lgbm] model training complete")

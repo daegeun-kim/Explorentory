@@ -1,6 +1,8 @@
 import json
 import math
+import time
 import geopandas as gpd
+import pandas as pd
 from sqlalchemy import create_engine, text
 from shapely.geometry import mapping
 from dotenv import load_dotenv
@@ -8,6 +10,38 @@ import os
 from typing import Optional
 
 load_dotenv(dotenv_path="../.env")
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+# Database tables
+NEIGHBORHOODS_TABLE   = "neighb"
+NEIGHBORHOODS_GEOM_COL = "geom"
+PROPERTIES_TABLE      = "nyc_units"
+PROPERTIES_GEOM_COL   = "geometry"
+
+# Coordinate reference systems
+DEFAULT_CRS = "EPSG:2263"   # assumed when CRS is missing
+TARGET_CRS  = "EPSG:4326"   # WGS84 — required by the frontend
+
+# Rent filter range around the user's target rent
+RENT_MIN_FACTOR = 0.8   # min_rent = rent * RENT_MIN_FACTOR
+RENT_MAX_FACTOR = 1.05   # max_rent = rent * RENT_MAX_FACTOR
+
+# Bedroom / bathroom filter tolerance (±N)
+BEDROOM_TOLERANCE  = 1
+BATHROOM_TOLERANCE = 1
+
+# Number of sample properties shown to the user for rating
+SAMPLE_SIZE        = 10
+SAMPLE_RANDOM_SEED = 42
+
+# Minimum number of sample properties that must come from the same
+# borocode as the user's selected neighborhood (rest filled randomly)
+MIN_SAME_BORO_SAMPLES = 5
+
+# ---------------------------------------------------------------------------
 
 DB_URL = os.getenv("db_url")
 engine = create_engine(DB_URL)
@@ -18,19 +52,20 @@ engine = create_engine(DB_URL)
 # ---------------------------------------------------------------------------
 
 def get_neighborhoods():
-    """Return all neighborhood polygons from the 'neighb' table as GeoJSON.
+    """Return all neighborhood polygons from the neighborhoods table as GeoJSON.
     Each feature includes centroid_lon and centroid_lat properties."""
-    print("[db] querying neighb table for neighborhood geometries")
-    sql = text("SELECT * FROM neighb")
+    print(f"[db] querying {NEIGHBORHOODS_TABLE} table for neighborhood geometries")
+    sql = text(f"SELECT * FROM {NEIGHBORHOODS_TABLE}")
 
     try:
-        gdf = gpd.read_postgis(sql, con=engine, geom_col="geom")
-        print(f"[db] retrieved {len(gdf)} neighborhoods")
+        _t0 = time.perf_counter()
+        gdf = gpd.read_postgis(sql, con=engine, geom_col=NEIGHBORHOODS_GEOM_COL)
+        print(f"[db] retrieved {len(gdf)} neighborhoods  ({time.perf_counter()-_t0:.3f}s)")
 
         if gdf.crs is None:
-            print("[db] neighb CRS not set — assuming EPSG:2263, reprojecting to EPSG:4326")
-            gdf = gdf.set_crs("EPSG:2263")
-        gdf = gdf.to_crs("EPSG:4326")
+            print(f"[db] neighb CRS not set — assuming {DEFAULT_CRS}, reprojecting to {TARGET_CRS}")
+            gdf = gdf.set_crs(DEFAULT_CRS)
+        gdf = gdf.to_crs(TARGET_CRS)
 
         # Add centroid lon/lat as properties so the frontend can read them
         centroids = gdf.geometry.centroid
@@ -57,22 +92,23 @@ def get_filtered_properties(
     bathrooms: int,
     neighborhood_lon: Optional[float] = None,
     neighborhood_lat: Optional[float] = None,
+    neighborhood_borocode: Optional[int] = None,
 ):
-    min_rent = rent * 0.5
-    max_rent = rent * 1.2
-    min_bed  = max(0, bedrooms - 1)
-    max_bed  = bedrooms + 1
-    min_bath = max(0, bathrooms - 1)
-    max_bath = bathrooms + 1
+    min_rent = rent * RENT_MIN_FACTOR
+    max_rent = rent * RENT_MAX_FACTOR
+    min_bed  = max(0, bedrooms - BEDROOM_TOLERANCE)
+    max_bed  = bedrooms + BEDROOM_TOLERANCE
+    min_bath = max(0, bathrooms - BATHROOM_TOLERANCE)
+    max_bath = bathrooms + BATHROOM_TOLERANCE
 
     print(
-        f"[db] querying nyc_units  rent=[{min_rent:.0f}, {max_rent:.0f}]"
+        f"[db] querying {PROPERTIES_TABLE}  rent=[{min_rent:.0f}, {max_rent:.0f}]"
         f"  bed=[{min_bed}, {max_bed}]  bath=[{min_bath}, {max_bath}]"
         f"  neighborhood_lon={neighborhood_lon}  neighborhood_lat={neighborhood_lat}"
     )
 
-    sql = text("""
-        SELECT * FROM nyc_units
+    sql = text(f"""
+        SELECT * FROM {PROPERTIES_TABLE}
         WHERE rent_knn  BETWEEN :min_rent AND :max_rent
         AND   bedroomnum  BETWEEN :min_bed  AND :max_bed
         AND   bathroomnum BETWEEN :min_bath AND :max_bath
@@ -84,8 +120,9 @@ def get_filtered_properties(
     }
 
     try:
-        gdf = gpd.read_postgis(sql, con=engine, geom_col="geometry", params=params)
-        print(f"[db] retrieved {len(gdf)} rows from nyc_units")
+        _t0 = time.perf_counter()
+        gdf = gpd.read_postgis(sql, con=engine, geom_col=PROPERTIES_GEOM_COL, params=params)
+        print(f"[db] retrieved {len(gdf)} rows from {PROPERTIES_TABLE}  ({time.perf_counter()-_t0:.3f}s)")
 
         if gdf.empty:
             print("[db] no rows matched the filters")
@@ -97,20 +134,21 @@ def get_filtered_properties(
 
         # Reproject to WGS84 for distance computation and frontend
         if gdf.crs is None:
-            print("[db] CRS not set — assuming EPSG:2263, reprojecting to EPSG:4326")
-            gdf = gdf.set_crs("EPSG:2263")
-        gdf_4326 = gdf.to_crs("EPSG:4326")
-        print("[db] reprojected to EPSG:4326")
+            print(f"[db] CRS not set — assuming {DEFAULT_CRS}, reprojecting to {TARGET_CRS}")
+            gdf = gdf.set_crs(DEFAULT_CRS)
+        gdf_4326 = gdf.to_crs(TARGET_CRS)
+        print(f"[db] reprojected to {TARGET_CRS}")
 
         # Compute euclidean distance from neighborhood centroid to each property's first point
         if neighborhood_lon is not None and neighborhood_lat is not None:
+            _td = time.perf_counter()
             gdf_4326["distance"] = gdf_4326.geometry.apply(
                 lambda g: _euclidean_dist(
                     _first_point(g),
                     (neighborhood_lon, neighborhood_lat)
                 )
             )
-            print(f"[db] computed distance column  min={gdf_4326['distance'].min():.6f}  max={gdf_4326['distance'].max():.6f}")
+            print(f"[db] computed distance column  min={gdf_4326['distance'].min():.6f}  max={gdf_4326['distance'].max():.6f}  ({time.perf_counter()-_td:.3f}s)")
         else:
             print("[db] no neighborhood centroid provided — setting distance=0")
             gdf_4326["distance"] = 0.0
@@ -118,10 +156,32 @@ def get_filtered_properties(
         # Transfer distance back to the raw-CRS gdf so recommend.py receives it
         gdf["distance"] = gdf_4326["distance"].values
 
-        # Sample up to 10 properties for the rating step
-        n_sample   = min(10, len(gdf_4326))
-        sample_gdf = gdf_4326.sample(n=n_sample, random_state=42)
-        print(f"[db] sampled {n_sample} properties for user rating")
+        # Sample properties for the rating step.
+        # If a borocode is provided, guarantee at least MIN_SAME_BORO_SAMPLES
+        # from the same borough; fill remaining slots from other properties.
+        if neighborhood_borocode is not None:
+            same_boro = gdf_4326[
+                gdf_4326["borocode"].apply(_safe_int) == int(neighborhood_borocode)
+            ]
+            other = gdf_4326[
+                gdf_4326["borocode"].apply(_safe_int) != int(neighborhood_borocode)
+            ]
+            n_boro  = min(MIN_SAME_BORO_SAMPLES, len(same_boro))
+            n_other = min(SAMPLE_SIZE - n_boro, len(other))
+            parts = []
+            if n_boro > 0:
+                parts.append(same_boro.sample(n=n_boro, random_state=SAMPLE_RANDOM_SEED))
+            if n_other > 0:
+                parts.append(other.sample(n=n_other, random_state=SAMPLE_RANDOM_SEED))
+            sample_gdf = pd.concat(parts) if parts else gdf_4326.iloc[:0]
+            print(
+                f"[db] sampled {len(sample_gdf)} properties for user rating"
+                f"  ({n_boro} from borocode={neighborhood_borocode}, {n_other} from others)"
+            )
+        else:
+            n_sample   = min(SAMPLE_SIZE, len(gdf_4326))
+            sample_gdf = gdf_4326.sample(n=n_sample, random_state=SAMPLE_RANDOM_SEED)
+            print(f"[db] sampled {n_sample} properties for user rating (random, no borocode)")
 
         sample_list = []
         for _, row in sample_gdf.iterrows():
@@ -144,6 +204,7 @@ def get_filtered_properties(
             sample_list.append(item)
 
         print(f"[db] sample built — geometry type: {sample_list[0]['geom']['type'] if sample_list else 'n/a'}")
+        print(f"[db] get_filtered_properties total: {time.perf_counter()-_t0:.3f}s")
         return {"gdf": gdf, "sample": sample_list, "error": None}
 
     except Exception as e:

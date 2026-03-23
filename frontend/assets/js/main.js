@@ -2,6 +2,20 @@
 // Orchestration: preferences → neighborhood selection → rating → recommendations.
 
 //--------------------------------------------------------------------
+// Configuration
+//--------------------------------------------------------------------
+
+const API_BASE = "http://localhost:8000";
+
+// Loading overlay appearance
+const OVERLAY_BACKGROUND   = "rgba(0,0,0,0.35)";
+const SPINNER_SIZE         = "40px";
+const SPINNER_BORDER_WIDTH = "4px";
+const SPINNER_BORDER_COLOR = "rgba(255,255,255,0.3)";
+const SPINNER_TOP_COLOR    = "#ffffff";
+const SPINNER_DURATION     = "1s";
+
+//--------------------------------------------------------------------
 // DOM references
 //--------------------------------------------------------------------
 const outputBox          = document.getElementById("output-message");
@@ -37,18 +51,18 @@ function showMapLoading() {
       display:        "flex",
       alignItems:     "center",
       justifyContent: "center",
-      background:     "rgba(0,0,0,0.35)",
+      background:     OVERLAY_BACKGROUND,
       zIndex:         "10",
     });
 
     const spinner = document.createElement("div");
     Object.assign(spinner.style, {
-      width:        "40px",
-      height:       "40px",
-      border:       "4px solid rgba(255,255,255,0.3)",
-      borderTop:    "4px solid #ffffff",
+      width:        SPINNER_SIZE,
+      height:       SPINNER_SIZE,
+      border:       `${SPINNER_BORDER_WIDTH} solid ${SPINNER_BORDER_COLOR}`,
+      borderTop:    `${SPINNER_BORDER_WIDTH} solid ${SPINNER_TOP_COLOR}`,
       borderRadius: "50%",
-      animation:    "mapSpin 1s linear infinite",
+      animation:    `mapSpin ${SPINNER_DURATION} linear infinite`,
     });
     mapLoadingOverlay.appendChild(spinner);
     singleMapDiv.appendChild(mapLoadingOverlay);
@@ -104,7 +118,7 @@ window.onPreferencesSubmit = async function (prefs) {
   setStatusMessage("Loading neighborhoods…");
 
   try {
-    const res  = await fetch("http://localhost:8000/neighborhoods");
+    const res  = await fetch(`${API_BASE}/neighborhoods`);
     const data = await res.json();
     hideMapLoading();
 
@@ -113,12 +127,10 @@ window.onPreferencesSubmit = async function (prefs) {
       return;
     }
 
-    // Display all neighborhood polygons on the map
     if (typeof window.showNeighborhoodsOnMap === "function") {
       window.showNeighborhoodsOnMap(data.geojson);
     }
 
-    // Show the neighborhood selection panel in the sidebar
     if (typeof window.showNeighborhoodSelector === "function") {
       window.showNeighborhoodSelector();
     }
@@ -126,7 +138,7 @@ window.onPreferencesSubmit = async function (prefs) {
   } catch (err) {
     console.error("[neighborhoods]", err);
     hideMapLoading();
-    setStatusMessage("Connection error. Is the backend running on port 8000?");
+    setStatusMessage(`Connection error. Is the backend running on ${API_BASE}?`);
   }
 };
 
@@ -137,11 +149,11 @@ window.onNeighborhoodSubmit = async function (neighborhood) {
   // Merge neighborhood centroid coordinates into preferences (not the name)
   currentPreferences = {
     ...currentPreferences,
-    neighborhood_lon: neighborhood.lon,
-    neighborhood_lat: neighborhood.lat,
+    neighborhood_lon:      neighborhood.lon,
+    neighborhood_lat:      neighborhood.lat,
+    neighborhood_borocode: neighborhood.borocode,
   };
 
-  // Clear neighborhood polygons from the map
   if (typeof window.clearNeighborhoodLayer === "function") {
     window.clearNeighborhoodLayer();
   }
@@ -150,12 +162,14 @@ window.onNeighborhoodSubmit = async function (neighborhood) {
   setStatusMessage(`Finding properties near ${neighborhood.name}…`);
 
   try {
-    const res  = await fetch("http://localhost:8000/properties", {
+    const _t0 = performance.now();
+    const res  = await fetch(`${API_BASE}/properties`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify(currentPreferences),
     });
     const data = await res.json();
+    console.log(`[timing] /properties fetch+parse: ${(performance.now() - _t0).toFixed(0)}ms`);
     hideMapLoading();
 
     if (data.error) {
@@ -169,7 +183,6 @@ window.onNeighborhoodSubmit = async function (neighborhood) {
       return;
     }
 
-    // Show rating panel — it handles map display one property at a time
     if (typeof window.showRatingPanel === "function") {
       window.showRatingPanel(sample);
     }
@@ -177,12 +190,12 @@ window.onNeighborhoodSubmit = async function (neighborhood) {
   } catch (err) {
     console.error("[properties]", err);
     hideMapLoading();
-    setStatusMessage("Connection error. Is the backend running on port 8000?");
+    setStatusMessage(`Connection error. Is the backend running on ${API_BASE}?`);
   }
 };
 
 //--------------------------------------------------------------------
-// Step 3 – Ratings submitted → run LightGBM → show top 1000
+// Step 3 – Ratings submitted → run model → show top results
 //--------------------------------------------------------------------
 window.onRatingsSubmit = async function (ratings) {
   if (!currentPreferences) return;
@@ -191,12 +204,15 @@ window.onRatingsSubmit = async function (ratings) {
   setStatusMessage("Running recommendation model…");
 
   try {
-    const res  = await fetch("http://localhost:8000/recommend", {
+    const _t0 = performance.now();
+    const res  = await fetch(`${API_BASE}/recommend`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ preferences: currentPreferences, ratings }),
     });
     const data = await res.json();
+    const _t1 = performance.now();
+    console.log(`[timing] /recommend fetch+parse: ${(_t1 - _t0).toFixed(0)}ms`);
     hideMapLoading();
 
     if (data.error) {
@@ -212,6 +228,14 @@ window.onRatingsSubmit = async function (ratings) {
     if (typeof window.showRecommendationsOnMap === "function") {
       window.showRecommendationsOnMap(data.geojson);
     }
+    const _t2 = performance.now();
+    console.log(`[timing] Map layer setup: ${(_t2 - _t1).toFixed(0)}ms`);
+
+    if (window.map) {
+      window.map.once("idle", () => {
+        console.log(`[timing] Map render complete: ${(performance.now() - _t2).toFixed(0)}ms`);
+      });
+    }
 
     const count = data.geojson.features ? data.geojson.features.length : 0;
     setStatusMessage(`Showing top ${count} recommended properties.`);
@@ -219,7 +243,7 @@ window.onRatingsSubmit = async function (ratings) {
   } catch (err) {
     console.error("[recommend]", err);
     hideMapLoading();
-    setStatusMessage("Connection error. Is the backend running on port 8000?");
+    setStatusMessage(`Connection error. Is the backend running on ${API_BASE}?`);
   }
 };
 

@@ -1,3 +1,47 @@
+/* ============================================================
+  CSS custom properties — edit these to restyle the whole app
+   ============================================================ */
+:root {
+  /* Accent / interactive */
+  --accent:       rgb(99, 173, 242);
+  --accent-hover: rgb(130, 190, 255);
+
+  /* Backgrounds */
+  --bg-body:     black;
+  --bg-dark:     rgb(16, 16, 19);
+  --bg-modal:    rgb(20, 20, 24);
+  --bg-input:    rgb(35, 35, 40);
+  --bg-card:     rgb(28, 28, 33);
+  --bg-message:  rgb(40, 40, 45);
+  --bg-muted:    rgb(55, 55, 62);
+  --bg-selected: rgb(28, 50, 75);
+  --bg-user-bubble: rgb(79, 122, 161);
+
+  /* Borders */
+  --border:      rgb(75, 75, 75);
+  --border-card: rgb(55, 55, 60);
+
+  /* Text */
+  --text-primary:   rgb(220, 220, 220);
+  --text-label:     rgb(160, 160, 160);
+  --text-secondary: rgb(145, 145, 145);
+  --text-muted:     rgb(120, 120, 120);
+  --text-dimmed:    rgb(100, 100, 100);
+  --text-soft:      rgb(200, 200, 200);
+  --text-white:     #ffffff;
+
+  /* Border radii */
+  --radius-btn:   24px;
+  --radius-modal: 16px;
+  --radius-card:  12px;
+  --radius-input: 8px;
+
+  /* Misc */
+  --reset-btn-color: #818a91;
+}
+
+/* ============================================================ */
+
 html, body {
   height: 100%;
   width: 100%;
@@ -5,7 +49,7 @@ html, body {
 
 body {
   font-family: "Roboto", Helvetica, sans-serif;
-  background-color: black;
+  background-color: var(--bg-body);
   margin: 0;
   padding: 0;
   display: flex;
@@ -38,7 +82,6 @@ body {
   margin-bottom: 12px;
   box-sizing: border-box;
   display: flex;
-  /* justify-content: flex-end; */
 }
 #reset {
   width: 80px;
@@ -46,7 +89,7 @@ body {
   border-radius: 15px;
   font-size: 16px;
   cursor: pointer;
-  background-color: #818a91;
+  background-color: var(--reset-btn-color);
 }
 
 /* ------------- Map ------------- */
@@ -60,7 +103,7 @@ body {
 #map {
   width: 100%;
   height: 100%;
-  border: 1px solid rgb(75, 75, 75);
+  border: 1px solid var(--border);
   box-sizing: border-box;
 }
 
@@ -70,15 +113,15 @@ body {
   flex: 2 1 0;
   min-height: 0;
   padding: 16px;
-  border: 1px solid rgb(75, 75, 75);
-  background-color: rgb(16, 16, 19);
+  border: 1px solid var(--border);
+  background-color: var(--bg-dark);
   box-sizing: border-box;
-  display: flex;          /* enable horizontal flex layout */
-  flex-direction: row;    /* side-by-side */
-  gap: 16px;              /* optional spacing between charts */
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
 }
 #title-placeholder {
-  color: rgb(255, 255, 255);
+  color: var(--text-white);
   font-size: 100px;
   font-family: "Roboto", sans-serif;
   font-weight: bold;
@@ -94,8 +137,8 @@ body {
 #message {
   width: 100%;
   height: 100%;
-  border: 1px solid rgb(75, 75, 75);
-  background-color: rgb(16, 16, 19);
+  border: 1px solid var(--border);
+  background-color: var(--bg-dark);
   padding: 16px;
   color: rgb(146, 146, 146);
   white-space: pre-wrap;
@@ -126,8 +169,8 @@ body {
   font-weight: bold;
 }
 #main-placeholder {
-  font-size: 50px; /* restore actual size */
-  line-height: 1.1; 
+  font-size: 50px;
+  line-height: 1.1;
   text-align: left;
   display: inline-block;
 }
@@ -143,16 +186,16 @@ body {
 
 .chat-message-user {
   align-self: flex-end;
-  background-color: rgb(79, 122, 161);
-  color: white;
+  background-color: var(--bg-user-bubble);
+  color: var(--text-white);
   border-top-right-radius: 4px;
   border-top-left-radius: 14px;
 }
 
 .chat-message-bot {
   align-self: flex-start;
-  background-color: rgb(40, 40, 45);
-  color: rgb(220, 220, 220);
+  background-color: var(--bg-message);
+  color: var(--text-primary);
   border-top-left-radius: 4px;
   border-top-right-radius: 14px;
 }
@@ -182,7 +225,7 @@ body {
   height: 36px;
   font-size: 16px;
   border-radius: 18px;
-  background-color: rgb(99, 173, 242);
+  background-color: var(--accent);
   color: rgb(0, 0, 0);
   border: none;
   cursor: pointer;
@@ -201,36 +244,36 @@ body {
 }
 
 #pref-modal {
-  background: rgb(20, 20, 24);
-  border: 1px solid rgb(75, 75, 75);
-  border-radius: 16px;
+  background: var(--bg-modal);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-modal);
   padding: 36px 40px;
   width: 380px;
   max-width: 90vw;
   display: flex;
   flex-direction: column;
   gap: 20px;
-  color: rgb(220, 220, 220);
+  color: var(--text-primary);
   font-family: "Roboto", sans-serif;
 }
 
 #pref-title {
   font-size: 36px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-white);
   line-height: 1;
 }
 
 #pref-subtitle {
   font-size: 14px;
-  color: rgb(145, 145, 145);
+  color: var(--text-secondary);
   margin-top: -12px;
 }
 
 .pref-label {
   display: block;
   font-size: 13px;
-  color: rgb(160, 160, 160);
+  color: var(--text-label);
   margin-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -253,13 +296,13 @@ body {
 .pref-rent-display {
   font-size: 28px;
   font-weight: 700;
-  color: rgb(99, 173, 242);
+  color: var(--accent);
   margin-bottom: 6px;
 }
 
 #pref-rent {
   width: 100%;
-  accent-color: rgb(99, 173, 242);
+  accent-color: var(--accent);
   cursor: pointer;
 }
 
@@ -267,17 +310,17 @@ body {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: rgb(120, 120, 120);
+  color: var(--text-muted);
   margin-top: 4px;
 }
 
 .pref-number {
   width: 100%;
   padding: 8px 10px;
-  border-radius: 8px;
-  background: rgb(35, 35, 40);
-  border: 1px solid rgb(75, 75, 75);
-  color: #fff;
+  border-radius: var(--radius-input);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-white);
   font-size: 18px;
   font-family: "Roboto", sans-serif;
   box-sizing: border-box;
@@ -285,8 +328,8 @@ body {
 
 #pref-submit {
   padding: 12px;
-  border-radius: 24px;
-  background: rgb(99, 173, 242);
+  border-radius: var(--radius-btn);
+  background: var(--accent);
   border: none;
   color: #000;
   font-size: 16px;
@@ -297,7 +340,7 @@ body {
 }
 
 #pref-submit:hover {
-  background: rgb(130, 190, 255);
+  background: var(--accent-hover);
 }
 
 /* ------------- Priority ranking cards ------------- */
@@ -315,51 +358,51 @@ body {
   gap: 6px;
   padding: 12px 8px;
   border-radius: 10px;
-  border: 1px solid rgb(75, 75, 75);
-  background: rgb(35, 35, 40);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
   cursor: pointer;
   user-select: none;
   transition: border-color 0.15s, background 0.15s;
 }
 
 .pref-priority-card:hover {
-  border-color: rgb(99, 173, 242);
+  border-color: var(--accent);
 }
 
 .pref-priority-card.selected {
-  border-color: rgb(99, 173, 242);
-  background: rgb(28, 50, 75);
+  border-color: var(--accent);
+  background: var(--bg-selected);
 }
 
 .pref-priority-rank {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  border: 2px solid rgb(75, 75, 75);
+  border: 2px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 14px;
   font-weight: 700;
-  color: rgb(99, 173, 242);
-  background: rgb(20, 20, 24);
+  color: var(--accent);
+  background: var(--bg-modal);
 }
 
 .pref-priority-card.selected .pref-priority-rank {
-  border-color: rgb(99, 173, 242);
-  background: rgb(99, 173, 242);
+  border-color: var(--accent);
+  background: var(--accent);
   color: #000;
 }
 
 .pref-priority-name {
   font-size: 13px;
-  color: rgb(200, 200, 200);
+  color: var(--text-soft);
   text-align: center;
 }
 
 #pref-priority-hint {
   font-size: 11px;
-  color: rgb(100, 100, 100);
+  color: var(--text-dimmed);
   margin-top: 6px;
 }
 
@@ -375,12 +418,12 @@ body {
 #neighborhood-header {
   font-size: 18px;
   font-weight: 700;
-  color: rgb(220, 220, 220);
+  color: var(--text-primary);
 }
 
 #neighborhood-instruction {
   font-size: 13px;
-  color: rgb(145, 145, 145);
+  color: var(--text-secondary);
 }
 
 #neighborhood-selected-display {
@@ -388,23 +431,23 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgb(28, 28, 33);
-  border: 1px solid rgb(55, 55, 60);
-  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
   padding: 20px;
 }
 
 #neighborhood-selected-label {
   font-size: 22px;
   font-weight: 700;
-  color: rgb(99, 173, 242);
+  color: var(--accent);
   text-align: center;
 }
 
 #neighborhood-confirm {
   padding: 12px;
-  border-radius: 24px;
-  background: rgb(99, 173, 242);
+  border-radius: var(--radius-btn);
+  background: var(--accent);
   border: none;
   color: #000;
   font-size: 16px;
@@ -415,13 +458,13 @@ body {
 }
 
 #neighborhood-confirm:disabled {
-  background: rgb(55, 55, 62);
-  color: rgb(120, 120, 120);
+  background: var(--bg-muted);
+  color: var(--text-muted);
   cursor: default;
 }
 
 #neighborhood-confirm:not(:disabled):hover {
-  background: rgb(130, 190, 255);
+  background: var(--accent-hover);
 }
 
 /* ------------- Rating panel ------------- */
@@ -433,32 +476,30 @@ body {
   height: 100%;
 }
 
-/* Progress line e.g. "Property 3 of 10" */
 #rating-progress {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: rgb(120, 120, 120);
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
-/* Card showing one property's info */
 #rating-card {
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 12px;
-  background: rgb(28, 28, 33);
-  border: 1px solid rgb(55, 55, 60);
-  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
   padding: 20px 18px;
 }
 
 #rating-neighborhood {
   font-size: 18px;
   font-weight: 700;
-  color: rgb(220, 220, 220);
+  color: var(--text-primary);
 }
 
 #rating-details {
@@ -469,15 +510,15 @@ body {
 
 #rating-details span {
   font-size: 13px;
-  color: rgb(160, 160, 160);
-  background: rgb(40, 40, 46);
+  color: var(--text-label);
+  background: var(--bg-message);
   padding: 4px 10px;
   border-radius: 6px;
 }
 
 #rating-question {
   font-size: 13px;
-  color: rgb(145, 145, 145);
+  color: var(--text-secondary);
   margin-top: 6px;
 }
 
@@ -490,10 +531,10 @@ body {
 #rating-value {
   width: 64px;
   padding: 6px 8px;
-  border-radius: 8px;
-  background: rgb(35, 35, 40);
-  border: 1px solid rgb(99, 173, 242);
-  color: #fff;
+  border-radius: var(--radius-input);
+  background: var(--bg-input);
+  border: 1px solid var(--accent);
+  color: var(--text-white);
   font-size: 22px;
   font-family: "Roboto", sans-serif;
   font-weight: 700;
@@ -502,10 +543,9 @@ body {
 
 .rating-label {
   font-size: 16px;
-  color: rgb(120, 120, 120);
+  color: var(--text-muted);
 }
 
-/* Previous / Next navigation row */
 #rating-nav {
   display: flex;
   justify-content: space-between;
@@ -526,8 +566,8 @@ body {
 }
 
 #rating-prev {
-  background: rgb(55, 55, 62);
-  color: rgb(200, 200, 200);
+  background: var(--bg-muted);
+  color: var(--text-soft);
 }
 
 #rating-prev:disabled {
@@ -536,12 +576,53 @@ body {
 }
 
 #rating-next {
-  background: rgb(99, 173, 242);
+  background: var(--accent);
   color: #000;
 }
 
 #rating-next:hover {
-  background: rgb(130, 190, 255);
+  background: var(--accent-hover);
+}
+
+/* ------------- Map hover tooltip ------------- */
+.maplibregl-popup-content {
+  background: var(--bg-modal);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  padding: 10px 12px;
+  color: var(--text-primary);
+  font-family: "Roboto", sans-serif;
+  font-size: 13px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.maplibregl-popup-tip {
+  display: none;
+}
+
+.prop-tooltip {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 160px;
+}
+
+.prop-tooltip tr + tr td {
+  padding-top: 4px;
+}
+
+.tt-label {
+  color: var(--text-secondary);
+  padding-right: 14px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.tt-value {
+  color: var(--text-primary);
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 
 /* ------------- responsive ------------- */

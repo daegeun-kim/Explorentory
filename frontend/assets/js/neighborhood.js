@@ -33,8 +33,8 @@ function showNeighborhoodSelector() {
 
   // Called by map.js when the user clicks a neighborhood polygon.
   // Receives the neighborhood name and its centroid coordinates.
-  window.onNeighborhoodClick = function (name, lon, lat) {
-    _selectedNeighborhood = { name, lon, lat };
+  window.onNeighborhoodClick = function (name, lon, lat, borocode) {
+    _selectedNeighborhood = { name, lon, lat, borocode };
 
     const label = document.getElementById("neighborhood-selected-label");
     if (label) label.textContent = name;
