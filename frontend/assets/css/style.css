@@ -92,12 +92,69 @@ body {
   background-color: var(--reset-btn-color);
 }
 
+#color-invert {
+  width: 36px;
+  height: 30px;
+  border: 0;
+  border-radius: 15px;
+  font-size: 18px;
+  cursor: pointer;
+  background-color: var(--bg-muted);
+  color: var(--text-soft);
+  margin-left: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
 /* ------------- Map ------------- */
 #single-map-container {
   width: 100%;
   flex: 3 1 0;
   min-height: 0;
   display: block;
+  position: relative;
+}
+
+/* Choropleth mode buttons — overlay on top of map */
+#choropleth-mode-buttons {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;   /* shown via JS after recommendations load */
+  flex-direction: row;
+  gap: 6px;
+  z-index: 5;
+  pointer-events: all;
+}
+
+.choropleth-btn {
+  padding: 5px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(16, 16, 19, 0.82);
+  color: var(--text-label);
+  font-family: "Roboto", sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.choropleth-btn:hover {
+  background: rgba(30, 30, 38, 0.92);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.choropleth-btn.active {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 700;
 }
 
 #map {
@@ -107,8 +164,46 @@ body {
   box-sizing: border-box;
 }
 
+/* Drag handle between map and chart */
+#chart-resize-handle {
+  display: none;   /* shown via JS when recommendations are loaded */
+  position: relative;
+  width: 100%;
+  height: 10px;
+  background: var(--border);
+  cursor: row-resize;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+#chart-resize-handle::before,
+#chart-resize-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 48px;
+  height: 1px;
+  background: var(--text-muted);
+  border-radius: 1px;
+  transition: background 0.15s;
+}
+
+#chart-resize-handle::before { top: 2px; }
+#chart-resize-handle::after  { bottom: 2px; }
+
+#chart-resize-handle:hover {
+  background: rgba(99, 173, 242, 0.15);
+}
+
+#chart-resize-handle:hover::before,
+#chart-resize-handle:hover::after {
+  background: var(--accent);
+}
+
 /* ------------- chart ------------- */
 #chart {
+  display: none;   /* hidden until recommendations are loaded (shown via JS) */
   width: 100%;
   flex: 2 1 0;
   min-height: 0;
@@ -116,21 +211,63 @@ body {
   border: 1px solid var(--border);
   background-color: var(--bg-dark);
   box-sizing: border-box;
-  display: flex;
-  flex-direction: row;
-  gap: 16px;
+  position: relative;
+  flex-direction: column;
 }
+
+/* Placeholder fills the full chart area */
+#chart-placeholder {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 0;
+}
+
 #title-placeholder {
   color: var(--text-white);
   font-size: 100px;
   font-family: "Roboto", sans-serif;
   font-weight: bold;
+  line-height: 1;
 }
 
-#chart1 {
+/* Row holding histogram + radar — hidden until charts init */
+#chart-charts-row {
+  display: none;   /* shown via JS */
+  flex: 1 1 0;
+  min-height: 0;
+  gap: 16px;
+}
+
+#chart1,
+#chart2 {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chart-title-bar {
+  flex-shrink: 0;
+  font-size: 14px;
+  font-family: "Roboto", sans-serif;
+  color: var(--text-primary);
+  text-align: left;
+  padding-bottom: 6px;
+}
+
+.chart-canvas-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.chart-canvas-wrap canvas {
+  display: block;
 }
 
 /* ------------- input-output ------------- */
@@ -648,4 +785,14 @@ body {
   #chart {
     margin-top: 8px;
   }
+}
+
+/* ------------- Color invert mode ------------- */
+body.inverted {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Cancel invert on the map so tiles stay readable */
+body.inverted #map {
+  filter: invert(1) hue-rotate(180deg);
 }

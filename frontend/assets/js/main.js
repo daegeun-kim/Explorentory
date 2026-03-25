@@ -20,12 +20,21 @@ const SPINNER_DURATION     = "1s";
 //--------------------------------------------------------------------
 const outputBox          = document.getElementById("output-message");
 const resetBtn           = document.getElementById("reset");
+const invertBtn          = document.getElementById("color-invert");
 const singleMapDiv       = document.getElementById("map");
 const singleMapContainer = document.getElementById("single-map-container");
 
 // Hide the legacy query form — preferences are collected via popup
 const queryForm = document.getElementById("query-form");
 if (queryForm) queryForm.style.display = "none";
+
+// Color-invert toggle: filter: invert(1) hue-rotate(180deg) on body;
+// #map gets the same filter to cancel out and keep tiles readable.
+if (invertBtn) {
+  invertBtn.addEventListener("click", () => {
+    document.body.classList.toggle("inverted");
+  });
+}
 
 //--------------------------------------------------------------------
 // Global state
@@ -104,8 +113,7 @@ function setStatusMessage(text) {
 function clearPlaceholders() {
   const op = document.getElementById("output-placeholder");
   if (op) op.remove();
-  const cp = document.getElementById("chart-placeholder");
-  if (cp) cp.remove();
+  // chart-placeholder visibility is managed by initCharts / clearCharts
 }
 
 //--------------------------------------------------------------------
@@ -237,6 +245,10 @@ window.onRatingsSubmit = async function (ratings) {
       });
     }
 
+    if (typeof window.initCharts === "function") {
+      window.initCharts(data.geojson);
+    }
+
     const count = data.geojson.features ? data.geojson.features.length : 0;
     setStatusMessage(`Showing top ${count} recommended properties.`);
 
@@ -248,6 +260,50 @@ window.onRatingsSubmit = async function (ratings) {
 };
 
 //--------------------------------------------------------------------
+// Chart resize handle — drag between map and chart to adjust split
+//--------------------------------------------------------------------
+const chartResizeHandle = document.getElementById("chart-resize-handle");
+let _chartResizing      = false;
+let _resizeStartY       = 0;
+let _resizeStartMapH    = 0;
+
+if (chartResizeHandle) {
+  chartResizeHandle.addEventListener("mousedown", (e) => {
+    _chartResizing   = true;
+    _resizeStartY    = e.clientY;
+    _resizeStartMapH = singleMapContainer ? singleMapContainer.offsetHeight : 0;
+    document.body.style.cursor     = "row-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+}
+
+document.addEventListener("mousemove", (e) => {
+  if (!_chartResizing) return;
+  const delta      = e.clientY - _resizeStartY;
+  const mainCon    = document.getElementById("main-container");
+  const totalH     = mainCon ? mainCon.offsetHeight : window.innerHeight;
+  const handleH    = chartResizeHandle ? chartResizeHandle.offsetHeight : 4;
+  const minMapH    = 120;
+  const minChartH  = 80;
+  const newMapH    = Math.max(minMapH, Math.min(totalH - handleH - minChartH, _resizeStartMapH + delta));
+
+  if (singleMapContainer) {
+    singleMapContainer.style.flex   = "none";
+    singleMapContainer.style.height = newMapH + "px";
+  }
+  if (window.map) window.map.resize();
+  if (typeof window.resizeCharts === "function") window.resizeCharts();
+});
+
+document.addEventListener("mouseup", () => {
+  if (!_chartResizing) return;
+  _chartResizing                 = false;
+  document.body.style.cursor     = "";
+  document.body.style.userSelect = "";
+});
+
+//--------------------------------------------------------------------
 // Reset button
 //--------------------------------------------------------------------
 if (resetBtn) {
@@ -255,20 +311,13 @@ if (resetBtn) {
     currentPreferences = null;
 
     if (typeof clearAllSources === "function") clearAllSources();
+    if (typeof window.clearCharts === "function") window.clearCharts();
     hideMapLoading();
 
     if (outputBox) {
       outputBox.innerHTML = `
         <div id="output-placeholder">
           <div id="main-placeholder">Set your<br>preferences<br><br>to find<br>your perfect<br>rental</div>
-        </div>`;
-    }
-
-    const chart1 = document.getElementById("chart1");
-    if (chart1) {
-      chart1.innerHTML = `
-        <div id="chart-placeholder">
-          <span id="title-placeholder">Explorentory</span>
         </div>`;
     }
 

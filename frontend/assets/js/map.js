@@ -12,21 +12,46 @@ const MAP_ZOOM   = 9.5;
 // GeoJSON property used for choropleth coloring on recommendations
 const SCORE_PROPERTY = "final_score";
 
-// 3-stop choropleth gradient (min → median → max score)
-const CHOROPLETH_COLORS = ["#00a2ff", "#ffffbf", "#ff0000"];
-
 // Epsilon to guarantee strictly ascending interpolate stops
 const CHOROPLETH_EPSILON = 1e-9;
+
+// stops: 5 → (min,p25,med,p75,max) ramp;  stops: 3 → (min,med,max) ramp
+const CHOROPLETH_MODES = [
+  {
+    id: "score",   label: "Score",      col: "final_score", stops: 5,
+    colors: ["#ff1f1f", "#ff7215", "#ffffff", "#adff41", "#00b344"],
+  },
+  {
+    id: "rent",    label: "Rent",       col: "rent_knn",    stops: 5,
+    colors: ["#001a53", "#002fb1", "#167bff", "#33cfff", "#ffffff"],
+  },
+  {
+    id: "sqft",    label: "Sqft",       col: "sqft",        stops: 5,
+    colors: ["#00575a", "#0098b3", "#00c1cf", "#0dffd7", "#ffffff"],
+  },
+  {
+    id: "built",   label: "Built Year", col: "built_year",  stops: 5,
+    colors: ["#501900", "#b93500f8", "#ff5917", "#ff985d", "#ffffff"],
+  },
+  {
+    id: "stories", label: "Stories",    col: "bld_story",   stops: 5,
+    colors: ["#4b0055", "#9300a7", "#f713ff", "#ff75ff", "#ffffff"],
+  },
+];
+const DEFAULT_CHOROPLETH_MODE_ID = "score";
 
 // fitBounds padding (px) for each view
 const FIT_PADDING_SINGLE          = 120;  // one property during rating
 const FIT_PADDING_NEIGHBORHOODS   = 40;   // all neighborhoods
 const FIT_PADDING_RECOMMENDATIONS = 40;   // top-N results
 
+// Max zoom when fitting to a single property (prevents zooming into one building footprint)
+const SINGLE_PROP_MAX_ZOOM = 17;
+
 // Property layer paint values
 const PROP_FILL_OPACITY         = 1;
 const PROP_FILL_OUTLINE_COLOR   = "#ffffff";
-const PROP_CIRCLE_RADIUS        = 3;
+const PROP_CIRCLE_RADIUS        = 2;
 const PROP_CIRCLE_STROKE_COLOR  = "#ffffff";
 const PROP_CIRCLE_STROKE_WIDTH  = 1.5;
 const PROP_CIRCLE_OPACITY       = 0.9;
@@ -72,6 +97,10 @@ window.map = map;
 // Shared hover popup instance for recommendation tooltips
 let _hoverPopup = null;
 
+// Store last recommendation GeoJSON for mode switching
+let _currentRecommendationsGeojson = null;
+let _activeChoroplethModeId = DEFAULT_CHOROPLETH_MODE_ID;
+
 //--------------------------------------------------------------------
 // Source / layer ids — properties
 //--------------------------------------------------------------------
@@ -112,6 +141,11 @@ function clearAllSources() {
   if (map.getSource(propertiesSourceId)) map.removeSource(propertiesSourceId);
   if (map.getSource(recommendationsPointSrcId)) map.removeSource(recommendationsPointSrcId);
   if (_hoverPopup) { _hoverPopup.remove(); _hoverPopup = null; }
+
+  _currentRecommendationsGeojson = null;
+  _activeChoroplethModeId = DEFAULT_CHOROPLETH_MODE_ID;
+  const modeButtons = document.getElementById("choropleth-mode-buttons");
+  if (modeButtons) modeButtons.style.display = "none";
 }
 
 //--------------------------------------------------------------------
@@ -177,9 +211,121 @@ function _getQuantiles(geojsonObj, col) {
 }
 
 //--------------------------------------------------------------------
+// Helper: compute 5-quantile stops (min, p25, median, p75, max)
+//--------------------------------------------------------------------
+function _getQuantiles5(geojsonObj, col) {
+  const vals = geojsonObj.features
+    .map(f => Number(f.properties[col]))
+    .filter(v => Number.isFinite(v));
+
+  if (!vals.length) return null;
+  vals.sort((a, b) => a - b);
+
+  const n = vals.length;
+  const quantile = (p) => {
+    const idx = p * (n - 1);
+    const lo  = Math.floor(idx);
+    const hi  = Math.ceil(idx);
+    return lo === hi ? vals[lo] : vals[lo] * (1 - (idx - lo)) + vals[hi] * (idx - lo);
+  };
+
+  let min = vals[0];
+  let p25 = quantile(0.25);
+  let med = quantile(0.5);
+  let p75 = quantile(0.75);
+  let max = vals[n - 1];
+
+  // Ensure strictly ascending
+  if (p25 <= min) p25 = min + CHOROPLETH_EPSILON;
+  if (med <= p25) med = p25 + CHOROPLETH_EPSILON;
+  if (p75 <= med) p75 = med + CHOROPLETH_EPSILON;
+  if (max <= p75) max = p75 + CHOROPLETH_EPSILON;
+
+  return { min, p25, med, p75, max };
+}
+
+//--------------------------------------------------------------------
+// Helper: build MapLibre color expression + value/color stop pairs.
+// Returns { expr, stops } where stops = [[value, hexColor], ...].
+// Both are derived from the mode's own color palette so histogram bars
+// and map geometry always share the same coloring.
+//--------------------------------------------------------------------
+function _buildColorExpr(geojsonObj, mode) {
+  const c = mode.colors;
+  if (mode.stops === 5) {
+    const q = _getQuantiles5(geojsonObj, mode.col);
+    if (!q) return { expr: c[2], stops: [] };
+    const stops = [[q.min, c[0]], [q.p25, c[1]], [q.med, c[2]], [q.p75, c[3]], [q.max, c[4]]];
+    return {
+      expr: ["interpolate", ["linear"], ["get", mode.col],
+             q.min, c[0], q.p25, c[1], q.med, c[2], q.p75, c[3], q.max, c[4]],
+      stops,
+    };
+  }
+  const q = _getQuantiles(geojsonObj, mode.col);
+  if (!q) return { expr: c[1], stops: [] };
+  const stops = [[q.min, c[0]], [q.median, c[1]], [q.max, c[2]]];
+  return {
+    expr: ["interpolate", ["linear"], ["get", mode.col],
+           q.min, c[0], q.median, c[1], q.max, c[2]],
+    stops,
+  };
+}
+
+//--------------------------------------------------------------------
+// Mode buttons: init click listeners + update choropleth paint props
+//--------------------------------------------------------------------
+function _initModeButtons() {
+  const container = document.getElementById("choropleth-mode-buttons");
+  if (!container) return;
+
+  container.style.display = "flex";
+
+  // Reset all buttons, activate default
+  container.querySelectorAll(".choropleth-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === _activeChoroplethModeId);
+    // Replace old listener by cloning
+    const fresh = btn.cloneNode(true);
+    btn.replaceWith(fresh);
+  });
+
+  container.querySelectorAll(".choropleth-btn").forEach(btn => {
+    btn.addEventListener("click", () => updateChoroplethMode(btn.dataset.mode));
+  });
+}
+
+function updateChoroplethMode(modeId) {
+  const mode = CHOROPLETH_MODES.find(m => m.id === modeId);
+  if (!mode || !_currentRecommendationsGeojson) return;
+
+  _activeChoroplethModeId = modeId;
+
+  const { expr: colorExpr, stops } = _buildColorExpr(_currentRecommendationsGeojson, mode);
+
+  if (map.getLayer(propertiesFillId)) {
+    map.setPaintProperty(propertiesFillId, "fill-color",         colorExpr);
+    map.setPaintProperty(propertiesFillId, "fill-outline-color", colorExpr);
+  }
+  if (map.getLayer(propertiesCircleId)) {
+    map.setPaintProperty(propertiesCircleId, "circle-color",        colorExpr);
+    map.setPaintProperty(propertiesCircleId, "circle-stroke-color", colorExpr);
+  }
+
+  // Update button active states
+  document.querySelectorAll(".choropleth-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === modeId);
+  });
+
+  // Notify charts — pass value/color stops so histogram bars can match the map
+  if (typeof window.onChoroplethModeChange === "function") {
+    window.onChoroplethModeChange(modeId, mode.col, mode.label, stops);
+  }
+}
+
+//--------------------------------------------------------------------
 // Internal: clear old property layers/source, add fresh source + layer
 //--------------------------------------------------------------------
-function _applyLayer(geojsonObj, colorExpr, fitPadding) {
+function _applyLayer(geojsonObj, colorExpr, fitPadding, fitOptions = {}) {
   const applyFn = () => {
     // Clear only property layers (not neighborhood layers)
     if (map.getLayer(propertiesFillId))   map.removeLayer(propertiesFillId);
@@ -215,7 +361,7 @@ function _applyLayer(geojsonObj, colorExpr, fitPadding) {
     }
 
     const bounds = getGeojsonBounds(geojsonObj);
-    if (bounds) map.fitBounds(bounds, { padding: fitPadding });
+    if (bounds) map.fitBounds(bounds, { padding: fitPadding, ...fitOptions });
   };
 
   if (!map.isStyleLoaded()) {
@@ -331,7 +477,7 @@ function showSinglePropertyOnMap(property) {
     }],
   };
 
-  _applyLayer(geojson, SINGLE_PROP_COLOR, FIT_PADDING_SINGLE);
+  _applyLayer(geojson, SINGLE_PROP_COLOR, FIT_PADDING_SINGLE, { maxZoom: SINGLE_PROP_MAX_ZOOM });
 }
 
 //--------------------------------------------------------------------
@@ -353,6 +499,15 @@ function _buildTooltipHTML(props) {
     return `<tr><td class="tt-label">${label}</td><td class="tt-value">${display}</td></tr>`;
   }).join("");
   return `<table class="prop-tooltip">${rows}</table>`;
+}
+
+function _attachClickHighlight(layerId) {
+  map.on("click", layerId, (e) => {
+    if (!e.features.length) return;
+    if (typeof window.onPropertyClick === "function") {
+      window.onPropertyClick(e.features[0].properties);
+    }
+  });
 }
 
 function _attachHoverTooltip(layerId) {
@@ -460,9 +615,11 @@ function _applyRecommendationLayers(geojsonObj, colorExpr, fitPadding) {
       },
     });
 
-    // Attach hover tooltips to both layers
+    // Attach hover tooltips and click highlight to both layers
     _attachHoverTooltip(propertiesFillId);
     _attachHoverTooltip(propertiesCircleId);
+    _attachClickHighlight(propertiesFillId);
+    _attachClickHighlight(propertiesCircleId);
 
     const bounds = getGeojsonBounds(geojsonObj);
     if (bounds) map.fitBounds(bounds, { padding: fitPadding });
@@ -476,22 +633,17 @@ function _applyRecommendationLayers(geojsonObj, colorExpr, fitPadding) {
 }
 
 //--------------------------------------------------------------------
-// showRecommendationsOnMap  – top results, 3-stop choropleth by score
+// showRecommendationsOnMap  – top results, default choropleth by score
 //--------------------------------------------------------------------
 function showRecommendationsOnMap(geojson) {
-  const q = _getQuantiles(geojson, SCORE_PROPERTY);
+  _currentRecommendationsGeojson = geojson;
+  _activeChoroplethModeId = DEFAULT_CHOROPLETH_MODE_ID;
 
-  let colorExpr = CHOROPLETH_COLORS[1];
-  if (q) {
-    colorExpr = [
-      "interpolate", ["linear"], ["get", SCORE_PROPERTY],
-      q.min,    CHOROPLETH_COLORS[0],
-      q.median, CHOROPLETH_COLORS[1],
-      q.max,    CHOROPLETH_COLORS[2],
-    ];
-  }
+  const defMode = CHOROPLETH_MODES.find(m => m.id === DEFAULT_CHOROPLETH_MODE_ID);
+  const { expr: colorExpr } = _buildColorExpr(geojson, defMode);
 
   _applyRecommendationLayers(geojson, colorExpr, FIT_PADDING_RECOMMENDATIONS);
+  _initModeButtons();
 }
 
 //--------------------------------------------------------------------
@@ -502,3 +654,10 @@ window.clearNeighborhoodLayer   = clearNeighborhoodLayer;
 window.showSinglePropertyOnMap  = showSinglePropertyOnMap;
 window.showRecommendationsOnMap = showRecommendationsOnMap;
 window.clearAllSources          = clearAllSources;
+window.updateChoroplethMode     = updateChoroplethMode;
+
+window.getColorStopsForMode = function (geojsonObj, modeId) {
+  const mode = CHOROPLETH_MODES.find(m => m.id === modeId);
+  if (!mode || !geojsonObj) return [];
+  return _buildColorExpr(geojsonObj, mode).stops;
+};

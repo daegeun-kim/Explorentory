@@ -11,18 +11,36 @@
   <div id="main-container">
     <div id="single-map-container">
         <div id="map"></div>
+        <div id="choropleth-mode-buttons">
+          <button class="choropleth-btn active" data-mode="score">Score</button>
+          <button class="choropleth-btn" data-mode="rent">Rent</button>
+          <button class="choropleth-btn" data-mode="sqft">Sqft</button>
+          <button class="choropleth-btn" data-mode="built">Built Year</button>
+          <button class="choropleth-btn" data-mode="stories">Stories</button>
+        </div>
     </div>
+    <div id="chart-resize-handle"></div>
     <div id="chart">
       <div id="chart-placeholder">
         <span id="title-placeholder">Explorentory</span>
       </div>
-      <div id="chart1"></div>
+      <div id="chart-charts-row">
+        <div id="chart1">
+          <div id="chart1-title" class="chart-title-bar"></div>
+          <div id="chart1-canvas-wrap" class="chart-canvas-wrap"></div>
+        </div>
+        <div id="chart2">
+          <div id="chart2-title" class="chart-title-bar"></div>
+          <div id="chart2-canvas-wrap" class="chart-canvas-wrap"></div>
+        </div>
+      </div>
     </div>
   </div>
   <div id="input-output">
     <div id="message">
       <div id="button-container">
         <button id="reset">Reset</button>
+        <button id="color-invert">&#9680;</button>
       </div>
       <div id="output-message">
         <div id="output-placeholder">
@@ -38,6 +56,7 @@
 
   <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
   <script src="assets/js/map.js"></script>
+  <script src="assets/js/charts.js"></script>
   <script src="assets/js/preferences.js"></script>
   <script src="assets/js/neighborhood.js"></script>
   <script src="assets/js/rating.js"></script>
