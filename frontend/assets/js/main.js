@@ -7,14 +7,6 @@
 
 const API_BASE = "http://localhost:8000";
 
-// Loading overlay appearance
-const OVERLAY_BACKGROUND   = "rgba(0,0,0,0.35)";
-const SPINNER_SIZE         = "40px";
-const SPINNER_BORDER_WIDTH = "4px";
-const SPINNER_BORDER_COLOR = "rgba(255,255,255,0.3)";
-const SPINNER_TOP_COLOR    = "#ffffff";
-const SPINNER_DURATION     = "1s";
-
 //--------------------------------------------------------------------
 // DOM references
 //--------------------------------------------------------------------
@@ -23,10 +15,6 @@ const resetBtn           = document.getElementById("reset");
 const invertBtn          = document.getElementById("color-invert");
 const singleMapDiv       = document.getElementById("map");
 const singleMapContainer = document.getElementById("single-map-container");
-
-// Hide the legacy query form — preferences are collected via popup
-const queryForm = document.getElementById("query-form");
-if (queryForm) queryForm.style.display = "none";
 
 // Color-invert toggle: filter: invert(1) hue-rotate(180deg) on body;
 // #map gets the same filter to cancel out and keep tiles readable.
@@ -52,37 +40,10 @@ function showMapLoading() {
     mapLoadingOverlay = document.createElement("div");
     mapLoadingOverlay.id = "map-loading-overlay";
 
-    if (!singleMapDiv.style.position) singleMapDiv.style.position = "relative";
-
-    Object.assign(mapLoadingOverlay.style, {
-      position:       "absolute",
-      top: "0", left: "0", right: "0", bottom: "0",
-      display:        "flex",
-      alignItems:     "center",
-      justifyContent: "center",
-      background:     OVERLAY_BACKGROUND,
-      zIndex:         "10",
-    });
-
     const spinner = document.createElement("div");
-    Object.assign(spinner.style, {
-      width:        SPINNER_SIZE,
-      height:       SPINNER_SIZE,
-      border:       `${SPINNER_BORDER_WIDTH} solid ${SPINNER_BORDER_COLOR}`,
-      borderTop:    `${SPINNER_BORDER_WIDTH} solid ${SPINNER_TOP_COLOR}`,
-      borderRadius: "50%",
-      animation:    `mapSpin ${SPINNER_DURATION} linear infinite`,
-    });
+    spinner.className = "map-spinner";
     mapLoadingOverlay.appendChild(spinner);
     singleMapDiv.appendChild(mapLoadingOverlay);
-
-    if (!document.getElementById("map-loading-style")) {
-      const style = document.createElement("style");
-      style.id = "map-loading-style";
-      style.textContent =
-        "@keyframes mapSpin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}";
-      document.head.appendChild(style);
-    }
   } else {
     mapLoadingOverlay.style.display = "flex";
   }
@@ -203,6 +164,63 @@ window.onNeighborhoodSubmit = async function (neighborhood) {
 };
 
 //--------------------------------------------------------------------
+// Top-10 listing — shown in the right sidebar after recommendations load
+//--------------------------------------------------------------------
+function _showTop10Listing(geojson) {
+  if (!outputBox) return;
+
+  const features = [...geojson.features]
+    .sort((a, b) => (Number(b.properties.final_score) || 0) - (Number(a.properties.final_score) || 0))
+    .slice(0, 10);
+
+  const wrap = document.createElement("div");
+  wrap.id = "top10-listing";
+
+  const hdr = document.createElement("div");
+  hdr.className   = "top10-header";
+  hdr.textContent = `Top ${features.length} Recommended Properties`;
+  wrap.appendChild(hdr);
+
+  features.forEach((f, idx) => {
+    const p = f.properties;
+
+    const rent   = p.rent_knn      != null ? `$${Math.round(p.rent_knn).toLocaleString()}/mo` : "—";
+    const sqft   = p.sqft          != null ? `${Math.round(p.sqft).toLocaleString()} sqft`    : null;
+    const beds   = p.bedroomnum    != null ? `${p.bedroomnum} bd`   : null;
+    const baths  = p.bathroomnum   != null ? `${p.bathroomnum} ba`  : null;
+    const lvroom = p.livingroomnum != null && Number(p.livingroomnum) > 0 ? `${p.livingroomnum} lr` : null;
+    const built  = p.built_year    != null ? `Built ${Math.round(p.built_year)}`          : null;
+    const stories= p.bld_story     != null ? `${Math.round(p.bld_story)} fl.`             : null;
+    const hood   = p.small_n       || "—";
+
+    const tags = [sqft, beds, baths, lvroom, built, stories].filter(Boolean);
+
+    const card = document.createElement("div");
+    card.className = "top10-card";
+    card.innerHTML = `
+      <div class="top10-card-hood">#${idx + 1}&nbsp;${hood}</div>
+      <div class="top10-card-rent">${rent}</div>
+      <div class="top10-card-tags">${
+        tags.map(t => `<span class="top10-tag">${t}</span>`).join("")
+      }</div>`;
+
+    card.addEventListener("click", () => {
+      document.querySelectorAll(".top10-card").forEach(c => c.classList.remove("selected"));
+      card.classList.add("selected");
+
+      if (typeof window.onPropertyClick       === "function") window.onPropertyClick(p);
+      if (typeof window.flyToProperty         === "function") window.flyToProperty(p);
+      if (typeof window.highlightPropertyOnMap === "function") window.highlightPropertyOnMap(f);
+    });
+
+    wrap.appendChild(card);
+  });
+
+  outputBox.innerHTML = "";
+  outputBox.appendChild(wrap);
+}
+
+//--------------------------------------------------------------------
 // Step 3 – Ratings submitted → run model → show top results
 //--------------------------------------------------------------------
 window.onRatingsSubmit = async function (ratings) {
@@ -249,8 +267,7 @@ window.onRatingsSubmit = async function (ratings) {
       window.initCharts(data.geojson);
     }
 
-    const count = data.geojson.features ? data.geojson.features.length : 0;
-    setStatusMessage(`Showing top ${count} recommended properties.`);
+    _showTop10Listing(data.geojson);
 
   } catch (err) {
     console.error("[recommend]", err);
@@ -260,7 +277,7 @@ window.onRatingsSubmit = async function (ratings) {
 };
 
 //--------------------------------------------------------------------
-// Chart resize handle — drag between map and chart to adjust split
+// Chart resize handle — drag between map and chart (vertical)
 //--------------------------------------------------------------------
 const chartResizeHandle = document.getElementById("chart-resize-handle");
 let _chartResizing      = false;
@@ -278,29 +295,73 @@ if (chartResizeHandle) {
   });
 }
 
-document.addEventListener("mousemove", (e) => {
-  if (!_chartResizing) return;
-  const delta      = e.clientY - _resizeStartY;
-  const mainCon    = document.getElementById("main-container");
-  const totalH     = mainCon ? mainCon.offsetHeight : window.innerHeight;
-  const handleH    = chartResizeHandle ? chartResizeHandle.offsetHeight : 4;
-  const minMapH    = 120;
-  const minChartH  = 80;
-  const newMapH    = Math.max(minMapH, Math.min(totalH - handleH - minChartH, _resizeStartMapH + delta));
+//--------------------------------------------------------------------
+// Sidebar resize handle — drag between main-container and input-output (horizontal)
+//--------------------------------------------------------------------
+const sidebarResizeHandle = document.getElementById("sidebar-resize-handle");
+let _sidebarResizing      = false;
+let _sidebarResizeStartX  = 0;
+let _sidebarResizeStartW  = 0;
 
-  if (singleMapContainer) {
-    singleMapContainer.style.flex   = "none";
-    singleMapContainer.style.height = newMapH + "px";
+if (sidebarResizeHandle) {
+  sidebarResizeHandle.addEventListener("mousedown", (e) => {
+    _sidebarResizing     = true;
+    _sidebarResizeStartX = e.clientX;
+    const mainCon = document.getElementById("main-container");
+    _sidebarResizeStartW = mainCon ? mainCon.offsetWidth : 0;
+    document.body.style.cursor     = "col-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+}
+
+document.addEventListener("mousemove", (e) => {
+  if (_chartResizing) {
+    const delta      = e.clientY - _resizeStartY;
+    const mainCon    = document.getElementById("main-container");
+    const totalH     = mainCon ? mainCon.offsetHeight : window.innerHeight;
+    const handleH    = chartResizeHandle ? chartResizeHandle.offsetHeight : 4;
+    const minMapH    = 120;
+    const minChartH  = 80;
+    const newMapH    = Math.max(minMapH, Math.min(totalH - handleH - minChartH, _resizeStartMapH + delta));
+
+    if (singleMapContainer) {
+      singleMapContainer.style.flex   = "none";
+      singleMapContainer.style.height = newMapH + "px";
+    }
+    if (window.map) window.map.resize();
+    if (typeof window.resizeCharts === "function") window.resizeCharts();
   }
-  if (window.map) window.map.resize();
-  if (typeof window.resizeCharts === "function") window.resizeCharts();
+
+  if (_sidebarResizing) {
+    const delta      = e.clientX - _sidebarResizeStartX;
+    const handleW    = sidebarResizeHandle ? sidebarResizeHandle.offsetWidth : 10;
+    const totalW     = window.innerWidth;
+    const minMainW   = 300;
+    const minSideW   = 180;
+    const newMainW   = Math.max(minMainW, Math.min(totalW - handleW - minSideW, _sidebarResizeStartW + delta));
+
+    const mainCon = document.getElementById("main-container");
+    if (mainCon) {
+      mainCon.style.flex  = "none";
+      mainCon.style.width = newMainW + "px";
+    }
+    if (window.map) window.map.resize();
+    if (typeof window.resizeCharts === "function") window.resizeCharts();
+  }
 });
 
 document.addEventListener("mouseup", () => {
-  if (!_chartResizing) return;
-  _chartResizing                 = false;
-  document.body.style.cursor     = "";
-  document.body.style.userSelect = "";
+  if (_chartResizing) {
+    _chartResizing                 = false;
+    document.body.style.cursor     = "";
+    document.body.style.userSelect = "";
+  }
+  if (_sidebarResizing) {
+    _sidebarResizing               = false;
+    document.body.style.cursor     = "";
+    document.body.style.userSelect = "";
+  }
 });
 
 //--------------------------------------------------------------------

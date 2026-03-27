@@ -6,8 +6,12 @@
 //--------------------------------------------------------------------
 
 // Histogram
-const CHART_NUM_BINS           = 300;
-const CHART_BAR_COLOR_FALLBACK = "rgba(99, 173, 242, 0.75)";
+const CHART_NUM_BINS           = 300;   // number of bins for score (span / 300 per bar)
+const HIST_BIN_WIDTH_RENT      = 50;    // $50 per bar
+const HIST_BIN_WIDTH_SQFT      = 50;    // 50 sqft per bar
+const HIST_BIN_WIDTH_YEAR      = 5;     // 5 years per bar
+const HIST_BIN_WIDTH_STORIES   = 1;     // 1 story per bar
+const CHART_BAR_COLOR_FALLBACK = "rgb(99, 173, 242)";
 const CHART_BAR_OPACITY        = 1;
 const CHART_AXIS_COLOR         = "#555";
 const CHART_AXIS_LINE_WIDTH    = 1;
@@ -30,7 +34,7 @@ const RADAR_GUIDE_LINE_WIDTH   = 0.7;
 const RADAR_GUIDE_DASH         = [3, 4];
 const RADAR_INNER_STROKE_COLOR = "rgba(255, 255, 255, 0.5)";
 const RADAR_INNER_STROKE_WIDTH = 1.5;
-const RADAR_INNER_ALPHA        = 0.75;
+const RADAR_INNER_ALPHA        = 0.5;
 const RADAR_DOT_RADIUS         = 4;
 const RADAR_LABEL_PAD          = 20;
 const RADAR_FONT               = "14px Roboto, sans-serif";
@@ -55,6 +59,97 @@ let _selectedProps     = null;
 let _radarStats        = {};   // { key: { min, max } }
 let _activeColorStops  = [];   // [[value, hexColor], ...] — mirrors current map choropleth
 let _radarR            = 0;    // last computed radar R; used by histogram to cap its plotH
+let _histogramData     = null; // bin geometry cached for hover hit-testing
+let _histHoverEl       = null; // floating tooltip DOM element
+
+//--------------------------------------------------------------------
+// Histogram hover helpers
+//--------------------------------------------------------------------
+
+function _getHistHoverEl() {
+  if (!_histHoverEl) {
+    _histHoverEl = document.createElement("div");
+    _histHoverEl.id = "histogram-tooltip";
+    document.body.appendChild(_histHoverEl);
+  }
+  return _histHoverEl;
+}
+
+function _fmtHistBinLabel(start, bw) {
+  const end = start + bw;
+  if (_activeModeCol === "rent_knn")
+    return `$${Math.round(start).toLocaleString()} – $${Math.round(end).toLocaleString()}`;
+  if (_activeModeCol === "final_score")
+    return `${start.toFixed(3)} – ${end.toFixed(3)}`;
+  if (_activeModeCol === "built_year" || _activeModeCol === "bld_story")
+    return String(Math.round(start));
+  return `${Math.round(start)} – ${Math.round(end)} sqft`;
+}
+
+function _onHistMouseMove(e) {
+  const d = _histogramData;
+  if (!d) return;
+  const rect = d.canvas.getBoundingClientRect();
+  const mx   = e.clientX - rect.left;
+  const my   = e.clientY - rect.top;
+  const tip  = _getHistHoverEl();
+
+  if (mx < d.plotLeft || mx > d.plotLeft + d.plotW || my < d.plotTop || my > d.plotTop + d.plotH) {
+    tip.style.display = "none";
+    return;
+  }
+  const binIdx = Math.min(d.numBins - 1, Math.max(0, Math.floor((mx - d.plotLeft) / d.barW)));
+  const count  = d.counts[binIdx];
+  if (!count) { tip.style.display = "none"; return; }
+
+  const rangeStart    = d.minVal + binIdx * d.bw;
+  tip.textContent     = `${_fmtHistBinLabel(rangeStart, d.bw)}  ·  ${count} properties`;
+  tip.style.left      = (e.clientX + 14) + "px";
+  tip.style.top       = (e.clientY - 36) + "px";
+  tip.style.display   = "block";
+}
+
+function _onHistMouseLeave() {
+  if (_histHoverEl) _histHoverEl.style.display = "none";
+}
+
+function _onHistClick(e) {
+  const d = _histogramData;
+  if (!d) return;
+  const rect = d.canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  // Outside the plot area → clear filter
+  if (mx < d.plotLeft || mx > d.plotLeft + d.plotW || my < d.plotTop || my > d.plotTop + d.plotH) {
+    if (typeof window.clearMapBinFilter === "function") window.clearMapBinFilter();
+    return;
+  }
+
+  const binIdx = Math.min(d.numBins - 1, Math.max(0, Math.floor((mx - d.plotLeft) / d.barW)));
+  const count  = d.counts[binIdx];
+
+  if (!count) {
+    // Empty bin → clear filter
+    if (typeof window.clearMapBinFilter === "function") window.clearMapBinFilter();
+    return;
+  }
+
+  const binMin = d.minVal + binIdx * d.bw;
+  const binMax = binMin + d.bw;
+  if (typeof window.filterMapByBin === "function") {
+    window.filterMapByBin(_activeModeCol, binMin, binMax);
+  }
+}
+
+/** Returns the bin width for the histogram based on the active mode column. */
+function _getHistogramBinWidth(col, span) {
+  if (col === "rent_knn")   return HIST_BIN_WIDTH_RENT;
+  if (col === "sqft")       return HIST_BIN_WIDTH_SQFT;
+  if (col === "built_year") return HIST_BIN_WIDTH_YEAR;
+  if (col === "bld_story")  return HIST_BIN_WIDTH_STORIES;
+  return span / CHART_NUM_BINS;   // score: 300 bins
+}
 
 //--------------------------------------------------------------------
 // Color helpers
@@ -153,6 +248,8 @@ function clearCharts() {
   _selectedProps    = null;
   _activeColorStops = [];
   _radarR           = 0;
+  _histogramData    = null;
+  if (_histHoverEl) _histHoverEl.style.display = "none";
 
   const c1Wrap = document.getElementById("chart1-canvas-wrap");
   const c2Wrap = document.getElementById("chart2-canvas-wrap");
@@ -226,6 +323,14 @@ function _drawHistogram() {
     container.appendChild(canvas);
   }
 
+  // Attach interaction listeners once per canvas instance
+  if (!canvas._histHoverAttached) {
+    canvas.addEventListener("mousemove", _onHistMouseMove);
+    canvas.addEventListener("mouseleave", _onHistMouseLeave);
+    canvas.addEventListener("click",     _onHistClick);
+    canvas._histHoverAttached = true;
+  }
+
   const W = container.clientWidth;
   const H = container.clientHeight;
   if (W <= 0 || H <= 0) return;
@@ -246,13 +351,16 @@ function _drawHistogram() {
   const minVal = Math.min(...vals);
   const maxVal = Math.max(...vals);
   const span   = maxVal - minVal || 1;
-  const bw     = span / CHART_NUM_BINS;
+
+  // Dynamic bin width: score keeps 300 bins; others use domain-specific widths
+  const bw      = _getHistogramBinWidth(_activeModeCol, span);
+  const numBins = Math.max(1, Math.ceil(span / bw));
 
   // Bin data
-  const counts = new Array(CHART_NUM_BINS).fill(0);
+  const counts = new Array(numBins).fill(0);
   for (const v of vals) {
     let idx = Math.floor((v - minVal) / bw);
-    if (idx >= CHART_NUM_BINS) idx = CHART_NUM_BINS - 1;
+    if (idx >= numBins) idx = numBins - 1;
     counts[idx]++;
   }
   const maxCount = Math.max(...counts);
@@ -266,14 +374,17 @@ function _drawHistogram() {
   const plotTop = H - m.bottom - plotH;
   if (plotW <= 0 || plotH <= 0) return;
 
+  // Cache bin geometry for hover hit-testing
+  const barW = plotW / numBins;
+  _histogramData = { canvas, minVal, bw, numBins, counts, plotLeft: m.left, plotTop, plotW, plotH, barW };
+
   // Draw bars — each bar colored by the midpoint value through the choropleth ramp
-  const barW = plotW / CHART_NUM_BINS;
-  for (let i = 0; i < CHART_NUM_BINS; i++) {
+  for (let i = 0; i < numBins; i++) {
     const barH = maxCount > 0 ? (counts[i] / maxCount) * plotH : 0;
     if (barH <= 0) continue;
     const midVal   = minVal + (i + 0.5) * bw;
     ctx.fillStyle   = _interpolateColor(midVal, _activeColorStops);
-    ctx.globalAlpha = CHART_BAR_OPACITY;
+    ctx.globalAlpha = 1;
     ctx.fillRect(
       m.left + i * barW + 1,
       plotTop + plotH - barH,
@@ -471,16 +582,6 @@ function _drawRadarTriangle() {
   }
 
   ctx.restore();  // end clip
-
-  // Stroke the inner triangle outline on top of the gradient fill
-  ctx.beginPath();
-  ctx.moveTo(innerVerts[0].x, innerVerts[0].y);
-  ctx.lineTo(innerVerts[1].x, innerVerts[1].y);
-  ctx.lineTo(innerVerts[2].x, innerVerts[2].y);
-  ctx.closePath();
-  ctx.strokeStyle = RADAR_INNER_STROKE_COLOR;
-  ctx.lineWidth   = RADAR_INNER_STROKE_WIDTH;
-  ctx.stroke();
 
   // Colored dots at each inner vertex
   for (let i = 0; i < 3; i++) {

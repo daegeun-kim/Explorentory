@@ -19,11 +19,11 @@ const CHOROPLETH_EPSILON = 1e-9;
 const CHOROPLETH_MODES = [
   {
     id: "score",   label: "Score",      col: "final_score", stops: 5,
-    colors: ["#ff1f1f", "#ff7215", "#ffffff", "#adff41", "#00b344"],
+    colors: ["#ff5571", "#ff9886", "#fffef2", "#7eff43", "#18f197"],
   },
   {
     id: "rent",    label: "Rent",       col: "rent_knn",    stops: 5,
-    colors: ["#001a53", "#002fb1", "#167bff", "#33cfff", "#ffffff"],
+    colors: ["#003ab8", "#0044ff", "#167bff", "#33cfff", "#ffffff"],
   },
   {
     id: "sqft",    label: "Sqft",       col: "sqft",        stops: 5,
@@ -31,11 +31,11 @@ const CHOROPLETH_MODES = [
   },
   {
     id: "built",   label: "Built Year", col: "built_year",  stops: 5,
-    colors: ["#501900", "#b93500f8", "#ff5917", "#ff985d", "#ffffff"],
+    colors: ["#6e2300", "#b93500", "#ff5917", "#ff985d", "#ffffff"],
   },
   {
     id: "stories", label: "Stories",    col: "bld_story",   stops: 5,
-    colors: ["#4b0055", "#9300a7", "#f713ff", "#ff75ff", "#ffffff"],
+    colors: ["#630070", "#9300a7", "#f713ff", "#ff75ff", "#ffffff"],
   },
 ];
 const DEFAULT_CHOROPLETH_MODE_ID = "score";
@@ -54,7 +54,7 @@ const PROP_FILL_OUTLINE_COLOR   = "#ffffff";
 const PROP_CIRCLE_RADIUS        = 2;
 const PROP_CIRCLE_STROKE_COLOR  = "#ffffff";
 const PROP_CIRCLE_STROKE_WIDTH  = 1.5;
-const PROP_CIRCLE_OPACITY       = 0.9;
+const PROP_CIRCLE_OPACITY       = 0.5;
 
 // Neighborhood layer paint values
 const NEIGHBORHOOD_COLOR                  = "#63adf2";
@@ -68,7 +68,7 @@ const SINGLE_PROP_COLOR = "#63adf2";
 
 // Zoom level at which recommendations switch from circles (zoomed out)
 // to polygon fills (zoomed in)
-const RECOMMENDATIONS_POLYGON_MIN_ZOOM = 12;
+const RECOMMENDATIONS_POLYGON_MIN_ZOOM = 13;
 
 // Fields shown in the hover tooltip for recommendation properties
 // (in display order; keys must match GeoJSON property names from nyc_units)
@@ -101,13 +101,23 @@ let _hoverPopup = null;
 let _currentRecommendationsGeojson = null;
 let _activeChoroplethModeId = DEFAULT_CHOROPLETH_MODE_ID;
 
+// Whether the general empty-map-click handler has been registered
+let _mapEmptyClickAttached = false;
+
+// MapLibre Marker used for the selected-property pin
+let _selectedPropMarker = null;
+
 //--------------------------------------------------------------------
 // Source / layer ids — properties
 //--------------------------------------------------------------------
-const propertiesSourceId       = "properties";
-const propertiesFillId         = "properties-fill";
-const propertiesCircleId       = "properties-circle";
+const propertiesSourceId        = "properties";
+const propertiesFillId          = "properties-fill";
+const propertiesCircleId        = "properties-circle";
 const recommendationsPointSrcId = "recommendations-points";
+
+// Selected-property highlight (red fill, from listing card click)
+const selectedPropSrcId  = "selected-property";
+const selectedPropFillId = "selected-property-fill";
 
 //--------------------------------------------------------------------
 // Source / layer ids — neighborhoods
@@ -141,6 +151,7 @@ function clearAllSources() {
   if (map.getSource(propertiesSourceId)) map.removeSource(propertiesSourceId);
   if (map.getSource(recommendationsPointSrcId)) map.removeSource(recommendationsPointSrcId);
   if (_hoverPopup) { _hoverPopup.remove(); _hoverPopup = null; }
+  clearPropertyHighlight();
 
   _currentRecommendationsGeojson = null;
   _activeChoroplethModeId = DEFAULT_CHOROPLETH_MODE_ID;
@@ -621,6 +632,9 @@ function _applyRecommendationLayers(geojsonObj, colorExpr, fitPadding) {
     _attachClickHighlight(propertiesFillId);
     _attachClickHighlight(propertiesCircleId);
 
+    // Register the single empty-space click handler (once)
+    _attachMapEmptyClickHandler();
+
     const bounds = getGeojsonBounds(geojsonObj);
     if (bounds) map.fitBounds(bounds, { padding: fitPadding });
   };
@@ -647,6 +661,97 @@ function showRecommendationsOnMap(geojson) {
 }
 
 //--------------------------------------------------------------------
+// highlightPropertyOnMap / clearPropertyHighlight
+// Places an SVG pin marker at the selected property's centroid.
+// The original choropleth color is preserved — only the pin is added.
+//--------------------------------------------------------------------
+function clearPropertyHighlight() {
+  if (_selectedPropMarker) { _selectedPropMarker.remove(); _selectedPropMarker = null; }
+}
+
+function highlightPropertyOnMap(feature) {
+  clearPropertyHighlight();
+  if (!feature) return;
+
+  const lon = Number(feature.properties.centroid_lon);
+  const lat = Number(feature.properties.centroid_lat);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+
+  // Simple pin: red circle on top, white vertical line pointing down to the property
+  const el = document.createElement("div");
+  el.style.cssText = "pointer-events:none;";
+  el.innerHTML = `<svg width="20" height="40" viewBox="0 0 20 40" xmlns="http://www.w3.org/2000/svg">
+    <line x1="10" y1="18" x2="10" y2="40" stroke="#ffffff" stroke-width="2"/>
+    <circle cx="10" cy="10" r="9" fill="#ff3333" stroke="#ffffff" stroke-width="1.5"/>
+  </svg>`;
+
+  _selectedPropMarker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+    .setLngLat([lon, lat])
+    .addTo(map);
+}
+
+//--------------------------------------------------------------------
+// filterMapByBin / clearMapBinFilter
+// Restricts visible recommendation features to a specific bin range.
+//--------------------------------------------------------------------
+function filterMapByBin(col, binMin, binMax) {
+  if (!_currentRecommendationsGeojson) return;
+
+  const filtered = {
+    type: "FeatureCollection",
+    features: _currentRecommendationsGeojson.features.filter(f => {
+      const v = Number(f.properties[col]);
+      return Number.isFinite(v) && v >= binMin && v < binMax;
+    }),
+  };
+
+  const polygonSrc = map.getSource(propertiesSourceId);
+  if (polygonSrc) polygonSrc.setData(filtered);
+  const pointSrc = map.getSource(recommendationsPointSrcId);
+  if (pointSrc) pointSrc.setData(_polygonsToPoints(filtered));
+
+  const bounds = getGeojsonBounds(filtered);
+  if (bounds) map.fitBounds(bounds, { padding: 60 });
+}
+
+function clearMapBinFilter() {
+  if (!_currentRecommendationsGeojson) return;
+  const polygonSrc = map.getSource(propertiesSourceId);
+  if (polygonSrc) polygonSrc.setData(_currentRecommendationsGeojson);
+  const pointSrc = map.getSource(recommendationsPointSrcId);
+  if (pointSrc) pointSrc.setData(_polygonsToPoints(_currentRecommendationsGeojson));
+}
+
+//--------------------------------------------------------------------
+// _attachMapEmptyClickHandler
+// Single general click handler: clears bin filter + highlight when the
+// user clicks empty map space (no recommendation feature under cursor).
+//--------------------------------------------------------------------
+function _attachMapEmptyClickHandler() {
+  if (_mapEmptyClickAttached) return;
+  _mapEmptyClickAttached = true;
+  map.on("click", (e) => {
+    if (!_currentRecommendationsGeojson) return;
+    const activeLayers = [propertiesFillId, propertiesCircleId].filter(id => map.getLayer(id));
+    const hits = map.queryRenderedFeatures(e.point, { layers: activeLayers });
+    if (!hits.length) {
+      clearMapBinFilter();
+      clearPropertyHighlight();
+    }
+  });
+}
+
+//--------------------------------------------------------------------
+// flyToProperty  – fly the map to a property's centroid (for listing clicks)
+//--------------------------------------------------------------------
+function flyToProperty(props) {
+  const lon = Number(props.centroid_lon);
+  const lat = Number(props.centroid_lat);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+  map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 15), duration: 600 });
+}
+
+//--------------------------------------------------------------------
 // Expose to other scripts
 //--------------------------------------------------------------------
 window.showNeighborhoodsOnMap   = showNeighborhoodsOnMap;
@@ -655,6 +760,11 @@ window.showSinglePropertyOnMap  = showSinglePropertyOnMap;
 window.showRecommendationsOnMap = showRecommendationsOnMap;
 window.clearAllSources          = clearAllSources;
 window.updateChoroplethMode     = updateChoroplethMode;
+
+window.flyToProperty          = flyToProperty;
+window.highlightPropertyOnMap = highlightPropertyOnMap;
+window.filterMapByBin         = filterMapByBin;
+window.clearMapBinFilter      = clearMapBinFilter;
 
 window.getColorStopsForMode = function (geojsonObj, modeId) {
   const mode = CHOROPLETH_MODES.find(m => m.id === modeId);

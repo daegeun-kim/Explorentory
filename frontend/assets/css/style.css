@@ -67,6 +67,42 @@ body {
   min-height: 0;
 }
 
+/* Vertical drag handle between main-container and input-output */
+#sidebar-resize-handle {
+  width: 10px;
+  height: 100%;
+  background: var(--border);
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  transition: background 0.15s;
+}
+
+#sidebar-resize-handle::before,
+#sidebar-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 48px;
+  width: 1px;
+  background: var(--text-muted);
+  border-radius: 1px;
+  transition: background 0.15s;
+}
+
+#sidebar-resize-handle::before { left: 2px; }
+#sidebar-resize-handle::after  { right: 2px; }
+
+#sidebar-resize-handle:hover {
+  background: rgba(99, 173, 242, 0.15);
+}
+
+#sidebar-resize-handle:hover::before,
+#sidebar-resize-handle:hover::after {
+  background: var(--accent);
+}
+
 #input-output {
   flex: 1 1 0;
   display: flex;
@@ -162,6 +198,32 @@ body {
   height: 100%;
   border: 1px solid var(--border);
   box-sizing: border-box;
+  position: relative;
+}
+
+/* Map loading overlay (created dynamically; JS controls display) */
+#map-loading-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 10;
+}
+
+.map-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top: 4px solid #ffffff;
+  border-radius: 50%;
+  animation: mapSpin 1s linear infinite;
+}
+
+@keyframes mapSpin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 /* Drag handle between map and chart */
@@ -255,7 +317,7 @@ body {
   font-size: 14px;
   font-family: "Roboto", sans-serif;
   color: var(--text-primary);
-  text-align: left;
+  text-align: center;
   padding-bottom: 6px;
 }
 
@@ -337,11 +399,7 @@ body {
   border-top-right-radius: 14px;
 }
 #query-form {
-  margin-top: 10px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  z-index: 2;
+  display: none;   /* legacy form — hidden in favour of the preferences modal */
 }
 
 #query-input {
@@ -721,16 +779,98 @@ body {
   background: var(--accent-hover);
 }
 
+/* ------------- Property pin marker ------------- */
+.property-pin {
+  pointer-events: none;
+}
+
+/* ------------- Histogram hover tooltip ------------- */
+#histogram-tooltip {
+  position: fixed;
+  background: rgba(10, 10, 14, 0.92);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-family: "Roboto", sans-serif;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 200;
+  display: none;
+  white-space: nowrap;
+}
+
+/* ------------- Top-10 property listing ------------- */
+#top10-listing {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.top10-header {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.top10-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  padding: 7px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.top10-card:hover,
+.top10-card.selected {
+  border-color: var(--accent);
+  background: var(--bg-selected);
+}
+
+.top10-card-hood {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-white);
+  line-height: 1;
+  margin-bottom: 1px;
+}
+
+.top10-card-rent {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+  margin-bottom: 3px;
+}
+
+.top10-card-tags {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.top10-tag {
+  font-size: 15px;
+  color: var(--text-label);
+  background: var(--bg-message);
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+
 /* ------------- Map hover tooltip ------------- */
 .maplibregl-popup-content {
-  background: var(--bg-modal);
-  border: 1px solid var(--border);
+  background: #22252ba9;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: var(--radius-input);
-  padding: 10px 12px;
-  color: var(--text-primary);
-  font-family: "Roboto", sans-serif;
-  font-size: 13px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  padding: 10px 14px;
+  color: #ffffff;
+  font-family: "Arial", sans-serif;
+  font-size: 15px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
 }
 
 .maplibregl-popup-tip {
@@ -740,23 +880,25 @@ body {
 .prop-tooltip {
   border-collapse: collapse;
   width: 100%;
-  min-width: 160px;
+  min-width: 170px;
 }
 
 .prop-tooltip tr + tr td {
-  padding-top: 4px;
+  padding-top: 5px;
 }
 
 .tt-label {
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.6);
   padding-right: 14px;
   white-space: nowrap;
   vertical-align: middle;
+  font-size: 14px;
 }
 
 .tt-value {
-  color: var(--text-primary);
-  font-weight: 600;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 16px;
   text-align: right;
   white-space: nowrap;
   vertical-align: middle;
