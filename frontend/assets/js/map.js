@@ -46,7 +46,7 @@ const FIT_PADDING_NEIGHBORHOODS   = 40;   // all neighborhoods
 const FIT_PADDING_RECOMMENDATIONS = 40;   // top-N results
 
 // Max zoom when fitting to a single property (prevents zooming into one building footprint)
-const SINGLE_PROP_MAX_ZOOM = 17;
+const SINGLE_PROP_MAX_ZOOM = 13;
 
 // Property layer paint values
 const PROP_FILL_OPACITY         = 1;
@@ -68,7 +68,7 @@ const SINGLE_PROP_COLOR = "#63adf2";
 
 // Zoom level at which recommendations switch from circles (zoomed out)
 // to polygon fills (zoomed in)
-const RECOMMENDATIONS_POLYGON_MIN_ZOOM = 13;
+const RECOMMENDATIONS_POLYGON_MIN_ZOOM = 11;
 
 // Fields shown in the hover tooltip for recommendation properties
 // (in display order; keys must match GeoJSON property names from nyc_units)

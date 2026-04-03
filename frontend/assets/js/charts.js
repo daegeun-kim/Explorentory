@@ -7,7 +7,7 @@
 
 // Histogram
 const CHART_NUM_BINS           = 300;   // number of bins for score (span / 300 per bar)
-const HIST_BIN_WIDTH_RENT      = 50;    // $50 per bar
+const HIST_BIN_WIDTH_RENT      = 10;    // $50 per bar
 const HIST_BIN_WIDTH_SQFT      = 50;    // 50 sqft per bar
 const HIST_BIN_WIDTH_YEAR      = 5;     // 5 years per bar
 const HIST_BIN_WIDTH_STORIES   = 1;     // 1 story per bar
