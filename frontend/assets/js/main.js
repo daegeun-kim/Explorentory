@@ -16,11 +16,15 @@ const invertBtn          = document.getElementById("color-invert");
 const singleMapDiv       = document.getElementById("map");
 const singleMapContainer = document.getElementById("single-map-container");
 
-// Color-invert toggle: filter: invert(1) hue-rotate(180deg) on body;
-// #map gets the same filter to cancel out and keep tiles readable.
+// Color mode toggle: switches between dark (default) and bright mode.
+// body.bright applies explicit bright-mode CSS custom properties.
+// toggleMapStyle swaps the basemap style file; redrawCharts re-renders
+// canvas charts with mode-appropriate colors.
 if (invertBtn) {
   invertBtn.addEventListener("click", () => {
-    document.body.classList.toggle("inverted");
+    document.body.classList.toggle("bright");
+    if (typeof window.toggleMapStyle  === "function") window.toggleMapStyle();
+    if (typeof window.redrawCharts    === "function") window.redrawCharts();
   });
 }
 

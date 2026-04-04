@@ -48,23 +48,45 @@ const FIT_PADDING_RECOMMENDATIONS = 40;   // top-N results
 // Max zoom when fitting to a single property (prevents zooming into one building footprint)
 const SINGLE_PROP_MAX_ZOOM = 13;
 
-// Property layer paint values
-const PROP_FILL_OPACITY         = 1;
-const PROP_FILL_OUTLINE_COLOR   = "#ffffff";
-const PROP_CIRCLE_RADIUS        = 2;
-const PROP_CIRCLE_STROKE_COLOR  = "#ffffff";
-const PROP_CIRCLE_STROKE_WIDTH  = 1.5;
-const PROP_CIRCLE_OPACITY       = 0.5;
+// Speed multiplier for fitBounds during survey step (faster transitions between properties)
+const SINGLE_PROP_FIT_SPEED = 4;
 
-// Neighborhood layer paint values
-const NEIGHBORHOOD_COLOR                  = "#63adf2";
+// Property layer paint values (non-color)
+const PROP_FILL_OPACITY        = 1;
+const PROP_CIRCLE_RADIUS       = 2;
+const PROP_CIRCLE_STROKE_WIDTH = 1.5;
+const PROP_CIRCLE_OPACITY      = 0.5;
+
+// Neighborhood layer paint values (non-color)
 const NEIGHBORHOOD_FILL_OPACITY           = 0.06;
 const NEIGHBORHOOD_LINE_WIDTH             = 1.2;
 const NEIGHBORHOOD_LINE_OPACITY           = 0.75;
 const NEIGHBORHOOD_SELECTED_FILL_OPACITY  = 0.4;
 
-// Single-property highlight color (rating step)
-const SINGLE_PROP_COLOR = "#63adf2";
+// Dark / bright color pairs for all JS-managed map elements.
+// _c() returns the right set based on the active basemap style.
+const _DARK_COLORS = {
+  neighborhood: "#63adf2",
+  singleProp:   "#63adf2",
+  fillOutline:  "#ffffff",
+  circleStroke: "#ffffff",
+  pinLine:      "#ffffff",
+  pinCircle:    "#ff3333",
+};
+const _BRIGHT_COLORS = {
+  neighborhood: "#1a6bc0",
+  singleProp:   "#1a6bc0",
+  fillOutline:  "#1a1a2e",
+  circleStroke: "#1a1a2e",
+  pinLine:      "#222233",
+  pinCircle:    "#cc2222",
+};
+// Evaluated at call time so it always reflects the current style
+function _c() {
+  return (typeof _currentStyleUrl !== "undefined" && _currentStyleUrl === STYLE_BRIGHT)
+    ? _BRIGHT_COLORS
+    : _DARK_COLORS;
+}
 
 // Zoom level at which recommendations switch from circles (zoomed out)
 // to polygon fills (zoomed in)
@@ -90,6 +112,7 @@ const map = new maplibregl.Map({
   style:     "assets/js/style.json",
   center:    MAP_CENTER,
   zoom:      MAP_ZOOM,
+  minZoom:   9,
 });
 
 window.map = map;
@@ -104,8 +127,37 @@ let _activeChoroplethModeId = DEFAULT_CHOROPLETH_MODE_ID;
 // Whether the general empty-map-click handler has been registered
 let _mapEmptyClickAttached = false;
 
-// MapLibre Marker used for the selected-property pin
+// MapLibre Marker used for the selected-property pin (recommendation listing click)
 let _selectedPropMarker = null;
+
+// MapLibre Marker used for the survey step (rating each property)
+let _surveyPropMarker    = null;  // legacy; kept for clearSurveyPin compatibility
+let _allSurveyPinMarkers = [];    // all 10 survey pins shown simultaneously
+
+// Survey-step state for style-switch re-apply
+let _surveyProperties       = null;
+let _currentSurveyActiveIdx = 0;
+
+// Hovered neighborhood feature id (for feature-state hover effect)
+let _hoveredNeighborhoodId = null;
+
+// Basemap style URLs and current active style
+const STYLE_DARK   = "assets/js/style.json";
+const STYLE_BRIGHT = "assets/js/style_bright.json";
+let _currentStyleUrl = STYLE_DARK;
+
+// Active view tracker — used to re-apply layers after a basemap style switch
+let _activeView           = null;   // "neighborhoods" | "single" | "recommendations"
+let _neighborhoodsGeojson = null;
+let _singlePropertyObj    = null;
+
+//--------------------------------------------------------------------
+// Source / layer ids — survey step (all 10 properties shown at once)
+//--------------------------------------------------------------------
+const surveyPropertiesSrcId    = "survey-properties";
+const surveyPropertiesPtSrcId  = "survey-properties-points";
+const surveyPropertiesFillId   = "survey-properties-fill";
+const surveyPropertiesCircleId = "survey-properties-circle";
 
 //--------------------------------------------------------------------
 // Source / layer ids — properties
@@ -138,6 +190,7 @@ function clearNeighborhoodLayer() {
   [neighborhoodSelectedSrcId, neighborhoodSourceId].forEach(id => {
     if (map.getSource(id)) map.removeSource(id);
   });
+  _hoveredNeighborhoodId = null;
   map.getCanvas().style.cursor = "";
 }
 
@@ -146,15 +199,32 @@ function clearNeighborhoodLayer() {
 //--------------------------------------------------------------------
 function clearAllSources() {
   clearNeighborhoodLayer();
+  clearSurveyPropertiesLayer();
   if (map.getLayer(propertiesFillId))    map.removeLayer(propertiesFillId);
   if (map.getLayer(propertiesCircleId))  map.removeLayer(propertiesCircleId);
   if (map.getSource(propertiesSourceId)) map.removeSource(propertiesSourceId);
   if (map.getSource(recommendationsPointSrcId)) map.removeSource(recommendationsPointSrcId);
   if (_hoverPopup) { _hoverPopup.remove(); _hoverPopup = null; }
   clearPropertyHighlight();
+  clearSurveyPin();
 
   _currentRecommendationsGeojson = null;
-  _activeChoroplethModeId = DEFAULT_CHOROPLETH_MODE_ID;
+  _activeChoroplethModeId        = DEFAULT_CHOROPLETH_MODE_ID;
+  _activeView                    = null;
+  _neighborhoodsGeojson          = null;
+  _singlePropertyObj             = null;
+  _surveyProperties              = null;
+  _currentSurveyActiveIdx        = 0;
+  _hoveredNeighborhoodId         = null;
+
+  // Reset map pitch to flat view
+  if (map.getPitch() > 0) map.easeTo({ pitch: 0, duration: 400 });
+
+  // Restore basemap 3D-building layer opacity (was hidden during recommendations view)
+  if (map.getLayer("building3D")) {
+    map.setPaintProperty("building3D", "fill-extrusion-opacity", 0.4);
+  }
+
   const modeButtons = document.getElementById("choropleth-mode-buttons");
   if (modeButtons) modeButtons.style.display = "none";
 }
@@ -314,8 +384,7 @@ function updateChoroplethMode(modeId) {
   const { expr: colorExpr, stops } = _buildColorExpr(_currentRecommendationsGeojson, mode);
 
   if (map.getLayer(propertiesFillId)) {
-    map.setPaintProperty(propertiesFillId, "fill-color",         colorExpr);
-    map.setPaintProperty(propertiesFillId, "fill-outline-color", colorExpr);
+    map.setPaintProperty(propertiesFillId, "fill-extrusion-color", colorExpr);
   }
   if (map.getLayer(propertiesCircleId)) {
     map.setPaintProperty(propertiesCircleId, "circle-color",        colorExpr);
@@ -338,22 +407,46 @@ function updateChoroplethMode(modeId) {
 //--------------------------------------------------------------------
 function _applyLayer(geojsonObj, colorExpr, fitPadding, fitOptions = {}) {
   const applyFn = () => {
-    // Clear only property layers (not neighborhood layers)
+    // Clear property layers and sources (not neighborhood layers)
     if (map.getLayer(propertiesFillId))   map.removeLayer(propertiesFillId);
     if (map.getLayer(propertiesCircleId)) map.removeLayer(propertiesCircleId);
-    if (map.getSource(propertiesSourceId)) map.removeSource(propertiesSourceId);
+    if (map.getSource(propertiesSourceId))        map.removeSource(propertiesSourceId);
+    if (map.getSource(recommendationsPointSrcId)) map.removeSource(recommendationsPointSrcId);
 
     map.addSource(propertiesSourceId, { type: "geojson", data: geojsonObj });
 
     if (_isPolygon(geojsonObj)) {
+      // Dual-layer: circles when zoomed out, fill polygon when zoomed in
+      map.addSource(recommendationsPointSrcId, {
+        type: "geojson",
+        data: _polygonsToPoints(geojsonObj),
+      });
+
+      // Fill layer — visible only at zoom >= RECOMMENDATIONS_POLYGON_MIN_ZOOM
       map.addLayer({
-        id:     propertiesFillId,
-        type:   "fill",
-        source: propertiesSourceId,
+        id:      propertiesFillId,
+        type:    "fill",
+        source:  propertiesSourceId,
+        minzoom: RECOMMENDATIONS_POLYGON_MIN_ZOOM,
         paint: {
           "fill-color":         colorExpr,
           "fill-opacity":       PROP_FILL_OPACITY,
-          "fill-outline-color": PROP_FILL_OUTLINE_COLOR,
+          "fill-outline-color": _c().fillOutline,
+        },
+      });
+
+      // Circle layer — visible only at zoom < RECOMMENDATIONS_POLYGON_MIN_ZOOM
+      map.addLayer({
+        id:      propertiesCircleId,
+        type:    "circle",
+        source:  recommendationsPointSrcId,
+        maxzoom: RECOMMENDATIONS_POLYGON_MIN_ZOOM,
+        paint: {
+          "circle-radius":       PROP_CIRCLE_RADIUS,
+          "circle-color":        colorExpr,
+          "circle-stroke-color": _c().circleStroke,
+          "circle-stroke-width": PROP_CIRCLE_STROKE_WIDTH,
+          "circle-opacity":      PROP_CIRCLE_OPACITY,
         },
       });
     } else {
@@ -364,7 +457,7 @@ function _applyLayer(geojsonObj, colorExpr, fitPadding, fitOptions = {}) {
         paint: {
           "circle-radius":       PROP_CIRCLE_RADIUS,
           "circle-color":        colorExpr,
-          "circle-stroke-color": PROP_CIRCLE_STROKE_COLOR,
+          "circle-stroke-color": _c().circleStroke,
           "circle-stroke-width": PROP_CIRCLE_STROKE_WIDTH,
           "circle-opacity":      PROP_CIRCLE_OPACITY,
         },
@@ -386,19 +479,27 @@ function _applyLayer(geojsonObj, colorExpr, fitPadding, fitOptions = {}) {
 // showNeighborhoodsOnMap  – display all neighborhoods for selection
 //--------------------------------------------------------------------
 function showNeighborhoodsOnMap(geojson) {
+  _neighborhoodsGeojson = geojson;
+  _activeView           = "neighborhoods";
+
   const applyFn = () => {
     clearNeighborhoodLayer();
 
-    map.addSource(neighborhoodSourceId, { type: "geojson", data: geojson });
+    // generateId: true enables feature-state (hover highlight)
+    map.addSource(neighborhoodSourceId, { type: "geojson", data: geojson, generateId: true });
 
-    // Subtle fill makes polygons clickable
+    // Fill — opacity driven by feature-state hover
     map.addLayer({
       id:     neighborhoodFillId,
       type:   "fill",
       source: neighborhoodSourceId,
       paint: {
-        "fill-color":   NEIGHBORHOOD_COLOR,
-        "fill-opacity": NEIGHBORHOOD_FILL_OPACITY,
+        "fill-color":   _c().neighborhood,
+        "fill-opacity": ["case",
+          ["boolean", ["feature-state", "hover"], false],
+          NEIGHBORHOOD_SELECTED_FILL_OPACITY,
+          NEIGHBORHOOD_FILL_OPACITY,
+        ],
       },
     });
 
@@ -408,10 +509,30 @@ function showNeighborhoodsOnMap(geojson) {
       type:   "line",
       source: neighborhoodSourceId,
       paint: {
-        "line-color":   NEIGHBORHOOD_COLOR,
+        "line-color":   _c().neighborhood,
         "line-width":   NEIGHBORHOOD_LINE_WIDTH,
         "line-opacity": NEIGHBORHOOD_LINE_OPACITY,
       },
+    });
+
+    // Hover: show selected-opacity fill via feature-state
+    map.on("mousemove", neighborhoodFillId, (e) => {
+      if (!e.features.length) return;
+      map.getCanvas().style.cursor = "pointer";
+      const feat = e.features[0];
+      if (_hoveredNeighborhoodId !== null && _hoveredNeighborhoodId !== feat.id) {
+        map.setFeatureState({ source: neighborhoodSourceId, id: _hoveredNeighborhoodId }, { hover: false });
+      }
+      _hoveredNeighborhoodId = feat.id;
+      map.setFeatureState({ source: neighborhoodSourceId, id: _hoveredNeighborhoodId }, { hover: true });
+    });
+
+    map.on("mouseleave", neighborhoodFillId, () => {
+      if (_hoveredNeighborhoodId !== null) {
+        map.setFeatureState({ source: neighborhoodSourceId, id: _hoveredNeighborhoodId }, { hover: false });
+        _hoveredNeighborhoodId = null;
+      }
+      map.getCanvas().style.cursor = "";
     });
 
     // Click: highlight selected neighborhood and notify neighborhood.js
@@ -441,7 +562,7 @@ function showNeighborhoodsOnMap(geojson) {
         type:   "fill",
         source: neighborhoodSelectedSrcId,
         paint: {
-          "fill-color":   NEIGHBORHOOD_COLOR,
+          "fill-color":   _c().neighborhood,
           "fill-opacity": NEIGHBORHOOD_SELECTED_FILL_OPACITY,
         },
       });
@@ -449,13 +570,6 @@ function showNeighborhoodsOnMap(geojson) {
       if (typeof window.onNeighborhoodClick === "function") {
         window.onNeighborhoodClick(name, lon, lat, borocode);
       }
-    });
-
-    map.on("mouseenter", neighborhoodFillId, () => {
-      map.getCanvas().style.cursor = "pointer";
-    });
-    map.on("mouseleave", neighborhoodFillId, () => {
-      map.getCanvas().style.cursor = "";
     });
 
     const bounds = getGeojsonBounds(geojson);
@@ -470,25 +584,153 @@ function showNeighborhoodsOnMap(geojson) {
 }
 
 //--------------------------------------------------------------------
-// showSinglePropertyOnMap  – one property during the rating step
+// showAllSurveyPropertiesOnMap  – display all 10 survey properties at once.
+// Below zoom 11 → circles; at/above zoom 11 → polygon fills.
 //--------------------------------------------------------------------
-function showSinglePropertyOnMap(property) {
+function showAllSurveyPropertiesOnMap(properties) {
+  _surveyProperties = properties;
+  _activeView       = "single";
+
   const geojson = {
     type:     "FeatureCollection",
-    features: [{
-      type:     "Feature",
-      geometry: property.geom,
-      properties: {
-        rent_knn:    property.rent_knn,
-        sqft:        property.sqft,
-        bedroomnum:  property.bedroomnum,
-        bathroomnum: property.bathroomnum,
-        small_n:     property.small_n,
-      },
-    }],
+    features: properties
+      .filter(p => p.geom)
+      .map(p => ({
+        type:     "Feature",
+        geometry: p.geom,
+        properties: {
+          centroid_lon: p.centroid_lon,
+          centroid_lat: p.centroid_lat,
+          rent_knn:     p.rent_knn,
+          small_n:      p.small_n,
+          bld_story:    p.bld_story,
+        },
+      })),
   };
 
-  _applyLayer(geojson, SINGLE_PROP_COLOR, FIT_PADDING_SINGLE, { maxZoom: SINGLE_PROP_MAX_ZOOM });
+  const applyFn = () => {
+    clearSurveyPropertiesLayer();
+    const color = _c().singleProp;
+
+    map.addSource(surveyPropertiesSrcId,   { type: "geojson", data: geojson });
+    map.addSource(surveyPropertiesPtSrcId, { type: "geojson", data: _polygonsToPoints(geojson) });
+
+    // Fill-extrusion — visible at zoom >= 11 (identical to recommendations final view)
+    map.addLayer({
+      id:      surveyPropertiesFillId,
+      type:    "fill-extrusion",
+      source:  surveyPropertiesSrcId,
+      minzoom: RECOMMENDATIONS_POLYGON_MIN_ZOOM,
+      paint: {
+        "fill-extrusion-color":   color,
+        "fill-extrusion-opacity": PROP_FILL_OPACITY,
+        "fill-extrusion-base":    ["*",
+          ["max", ["-", ["to-number", ["get", "bld_story"]], 1], 0],
+          3.048],
+        "fill-extrusion-height":  ["*",
+          ["max", ["to-number", ["get", "bld_story"]], 1],
+          3.048],
+      },
+    });
+
+    // Circle — visible at zoom < 11
+    map.addLayer({
+      id:      surveyPropertiesCircleId,
+      type:    "circle",
+      source:  surveyPropertiesPtSrcId,
+      maxzoom: RECOMMENDATIONS_POLYGON_MIN_ZOOM,
+      paint: {
+        "circle-radius":       PROP_CIRCLE_RADIUS,
+        "circle-color":        color,
+        "circle-stroke-color": _c().circleStroke,
+        "circle-stroke-width": PROP_CIRCLE_STROKE_WIDTH,
+        "circle-opacity":      PROP_CIRCLE_OPACITY,
+      },
+    });
+  };
+
+  if (!map.isStyleLoaded()) {
+    map.once("load", applyFn);
+  } else {
+    applyFn();
+  }
+}
+
+//--------------------------------------------------------------------
+// clearSurveyPropertiesLayer  – remove the survey property layers/sources
+//--------------------------------------------------------------------
+function clearSurveyPropertiesLayer() {
+  if (map.getLayer(surveyPropertiesFillId))   map.removeLayer(surveyPropertiesFillId);
+  if (map.getLayer(surveyPropertiesCircleId)) map.removeLayer(surveyPropertiesCircleId);
+  if (map.getSource(surveyPropertiesSrcId))   map.removeSource(surveyPropertiesSrcId);
+  if (map.getSource(surveyPropertiesPtSrcId)) map.removeSource(surveyPropertiesPtSrcId);
+}
+
+//--------------------------------------------------------------------
+// showSinglePropertyOnMap  – fly to a survey property's centroid.
+// All 10 geometries are already displayed by showAllSurveyPropertiesOnMap.
+//--------------------------------------------------------------------
+function showSinglePropertyOnMap(property) {
+  _singlePropertyObj = property;
+  const lon = Number(property.centroid_lon);
+  const lat = Number(property.centroid_lat);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+  map.flyTo({
+    center:   [lon, lat],
+    zoom:     Math.max(map.getZoom(), 12),
+    duration: Math.round(600 / SINGLE_PROP_FIT_SPEED),
+  });
+}
+
+//--------------------------------------------------------------------
+// clearSurveyPin  – removes all survey-step pin markers
+//--------------------------------------------------------------------
+function clearSurveyPin() {
+  if (_surveyPropMarker) { _surveyPropMarker.remove(); _surveyPropMarker = null; }
+  _allSurveyPinMarkers.forEach(m => m && m.remove());
+  _allSurveyPinMarkers = [];
+}
+
+//--------------------------------------------------------------------
+// showSurveyPinsOnMap  – place pins for all survey properties at once.
+// The active pin is full opacity; others are dimmed.
+//--------------------------------------------------------------------
+function showSurveyPinsOnMap(properties, activeIdx) {
+  clearSurveyPin();
+
+  properties.forEach((prop, idx) => {
+    const lon = Number(prop.centroid_lon);
+    const lat = Number(prop.centroid_lat);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+      _allSurveyPinMarkers.push(null); // keep index alignment
+      return;
+    }
+
+    const el = document.createElement("div");
+    el.className   = "property-pin";
+    el.style.opacity    = (idx === activeIdx) ? "1" : "0.3";
+    el.style.transition = "opacity 0.2s";
+    el.innerHTML = `<svg width="20" height="40" viewBox="0 0 20 40" xmlns="http://www.w3.org/2000/svg">
+      <line x1="10" y1="18" x2="10" y2="40" stroke="${_c().pinLine}" stroke-width="2"/>
+      <circle cx="10" cy="10" r="9" fill="${_c().pinCircle}" stroke="${_c().pinLine}" stroke-width="1.5"/>
+    </svg>`;
+
+    const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+      .setLngLat([lon, lat])
+      .addTo(map);
+    _allSurveyPinMarkers.push(marker);
+  });
+}
+
+//--------------------------------------------------------------------
+// updateActiveSurveyPin  – change which survey pin is fully opaque
+//--------------------------------------------------------------------
+function updateActiveSurveyPin(activeIdx) {
+  _currentSurveyActiveIdx = activeIdx;
+  _allSurveyPinMarkers.forEach((marker, idx) => {
+    if (!marker) return;
+    marker.getElement().style.opacity = (idx === activeIdx) ? "1" : "0.3";
+  });
 }
 
 //--------------------------------------------------------------------
@@ -590,20 +832,24 @@ function _applyRecommendationLayers(geojsonObj, colorExpr, fitPadding) {
       data: _polygonsToPoints(geojsonObj),
     });
 
-    // Fill layer — visible only when zoomed IN
-    // fill-sort-key: higher final_score rendered on top
+    // Fill-extrusion layer — visible only when zoomed IN (>= zoom 11)
+    // Each property extruded 10 ft per floor (bld_story = floor number):
+    //   base   = (floor - 1) × 3.048 m   (3.048 m ≈ 10 ft)
+    //   height = floor × 3.048 m
     map.addLayer({
       id:      propertiesFillId,
-      type:    "fill",
+      type:    "fill-extrusion",
       source:  propertiesSourceId,
       minzoom: RECOMMENDATIONS_POLYGON_MIN_ZOOM,
-      layout: {
-        "fill-sort-key": ["get", SCORE_PROPERTY],
-      },
       paint: {
-        "fill-color":         colorExpr,
-        "fill-opacity":       PROP_FILL_OPACITY,
-        "fill-outline-color": colorExpr,  // border matches fill
+        "fill-extrusion-color":   colorExpr,
+        "fill-extrusion-opacity": PROP_FILL_OPACITY,
+        "fill-extrusion-base":    ["*",
+          ["max", ["-", ["to-number", ["get", "bld_story"]], 1], 0],
+          3.048],
+        "fill-extrusion-height":  ["*",
+          ["max", ["to-number", ["get", "bld_story"]], 1],
+          3.048],
       },
     });
 
@@ -635,6 +881,12 @@ function _applyRecommendationLayers(geojsonObj, colorExpr, fitPadding) {
     // Register the single empty-space click handler (once)
     _attachMapEmptyClickHandler();
 
+    // Hide the basemap 3D-building layer so it doesn't occlude our fill-extrusion
+    // properties (basemap buildings render with depth testing that can cover our layer).
+    if (map.getLayer("building3D")) {
+      map.setPaintProperty("building3D", "fill-extrusion-opacity", 0);
+    }
+
     const bounds = getGeojsonBounds(geojsonObj);
     if (bounds) map.fitBounds(bounds, { padding: fitPadding });
   };
@@ -651,7 +903,8 @@ function _applyRecommendationLayers(geojsonObj, colorExpr, fitPadding) {
 //--------------------------------------------------------------------
 function showRecommendationsOnMap(geojson) {
   _currentRecommendationsGeojson = geojson;
-  _activeChoroplethModeId = DEFAULT_CHOROPLETH_MODE_ID;
+  _activeChoroplethModeId        = DEFAULT_CHOROPLETH_MODE_ID;
+  _activeView                    = "recommendations";
 
   const defMode = CHOROPLETH_MODES.find(m => m.id === DEFAULT_CHOROPLETH_MODE_ID);
   const { expr: colorExpr } = _buildColorExpr(geojson, defMode);
@@ -681,8 +934,8 @@ function highlightPropertyOnMap(feature) {
   const el = document.createElement("div");
   el.style.cssText = "pointer-events:none;";
   el.innerHTML = `<svg width="20" height="40" viewBox="0 0 20 40" xmlns="http://www.w3.org/2000/svg">
-    <line x1="10" y1="18" x2="10" y2="40" stroke="#ffffff" stroke-width="2"/>
-    <circle cx="10" cy="10" r="9" fill="#ff3333" stroke="#ffffff" stroke-width="1.5"/>
+    <line x1="10" y1="18" x2="10" y2="40" stroke="${_c().pinLine}" stroke-width="2"/>
+    <circle cx="10" cy="10" r="9" fill="${_c().pinCircle}" stroke="${_c().pinLine}" stroke-width="1.5"/>
   </svg>`;
 
   _selectedPropMarker = new maplibregl.Marker({ element: el, anchor: "bottom" })
@@ -754,12 +1007,93 @@ function flyToProperty(props) {
 //--------------------------------------------------------------------
 // Expose to other scripts
 //--------------------------------------------------------------------
+//--------------------------------------------------------------------
+// Map view control buttons: 2D/3D pitch toggle + North (bearing reset)
+// Shown at all times in the top-right corner of the map.
+//--------------------------------------------------------------------
+(function _initMapViewButtons() {
+  const pitchBtn = document.getElementById("btn-pitch-toggle");
+  const northBtn = document.getElementById("btn-north-reset");
+  if (!pitchBtn || !northBtn) return;
+
+  function _syncPitchBtn() {
+    pitchBtn.textContent = (map.getPitch() > 5) ? "2D" : "3D";
+  }
+
+  pitchBtn.addEventListener("click", () => {
+    if (map.getPitch() > 5) {
+      map.easeTo({ pitch: 0, duration: 600 });
+    } else {
+      map.easeTo({ pitch: 45, duration: 600 });
+    }
+  });
+
+  northBtn.addEventListener("click", () => {
+    map.easeTo({ bearing: 0, duration: 500 });
+  });
+
+  // Keep button label in sync with current pitch
+  map.on("pitch", _syncPitchBtn);
+  map.on("load",  _syncPitchBtn);
+  _syncPitchBtn();
+})();
+
+
+//--------------------------------------------------------------------
+// _reapplyCurrentState
+// Re-adds sources and layers after a basemap style switch.
+//--------------------------------------------------------------------
+function _reapplyCurrentState() {
+  if (_activeView === "neighborhoods" && _neighborhoodsGeojson) {
+    showNeighborhoodsOnMap(_neighborhoodsGeojson);
+  } else if (_activeView === "single" && _surveyProperties) {
+    showAllSurveyPropertiesOnMap(_surveyProperties);
+    showSurveyPinsOnMap(_surveyProperties, _currentSurveyActiveIdx);
+  } else if (_activeView === "recommendations" && _currentRecommendationsGeojson) {
+    const mode = CHOROPLETH_MODES.find(m => m.id === _activeChoroplethModeId);
+    const { expr: colorExpr } = _buildColorExpr(_currentRecommendationsGeojson, mode);
+    _applyRecommendationLayers(_currentRecommendationsGeojson, colorExpr, FIT_PADDING_RECOMMENDATIONS);
+    _initModeButtons();
+  }
+}
+
+//--------------------------------------------------------------------
+// toggleMapStyle  – switch basemap between dark and bright styles,
+// then re-apply all current data layers WITHOUT resetting the camera.
+//--------------------------------------------------------------------
+window.toggleMapStyle = function () {
+  // Remove markers before style switch — recreated with correct colors in _reapplyCurrentState
+  clearPropertyHighlight();
+  clearSurveyPin();
+
+  // Save camera so _reapplyCurrentState's fitBounds/flyTo calls don't reset the view
+  const savedCenter  = map.getCenter();
+  const savedZoom    = map.getZoom();
+  const savedPitch   = map.getPitch();
+  const savedBearing = map.getBearing();
+
+  _currentStyleUrl = (_currentStyleUrl === STYLE_DARK) ? STYLE_BRIGHT : STYLE_DARK;
+  map.setStyle(_currentStyleUrl);
+  map.once("idle", () => {
+    if (_activeView) _reapplyCurrentState();
+    // Restore camera immediately — jumpTo cancels any fitBounds animation
+    map.jumpTo({ center: savedCenter, zoom: savedZoom, pitch: savedPitch, bearing: savedBearing });
+  });
+};
+
+//--------------------------------------------------------------------
+// Expose to other scripts
+//--------------------------------------------------------------------
 window.showNeighborhoodsOnMap   = showNeighborhoodsOnMap;
 window.clearNeighborhoodLayer   = clearNeighborhoodLayer;
-window.showSinglePropertyOnMap  = showSinglePropertyOnMap;
+window.showSinglePropertyOnMap       = showSinglePropertyOnMap;
+window.showAllSurveyPropertiesOnMap  = showAllSurveyPropertiesOnMap;
 window.showRecommendationsOnMap = showRecommendationsOnMap;
 window.clearAllSources          = clearAllSources;
 window.updateChoroplethMode     = updateChoroplethMode;
+window.clearSurveyPin           = clearSurveyPin;
+window.showSurveyPinsOnMap      = showSurveyPinsOnMap;
+window.updateActiveSurveyPin    = updateActiveSurveyPin;
 
 window.flyToProperty          = flyToProperty;
 window.highlightPropertyOnMap = highlightPropertyOnMap;

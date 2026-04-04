@@ -1,7 +1,7 @@
 // rating.js
-// Shows sample properties one at a time for user rating.
-// Calls window.showSinglePropertyOnMap() for each property and
-// window.onRatingsSubmit() when all ratings are collected.
+// Shows all sample properties as rating cards so the user can rate each one
+// and easily go back to change a score. Calls window.showSinglePropertyOnMap()
+// for the active property and window.onRatingsSubmit() on submit.
 
 //--------------------------------------------------------------------
 // Configuration
@@ -14,7 +14,7 @@ const RATING_MAX     = 10;
 //--------------------------------------------------------------------
 
 let _properties = [];
-let _ratings    = [];   // stores rating value per property index
+let _ratings    = [];
 let _currentIdx = 0;
 
 //--------------------------------------------------------------------
@@ -25,12 +25,16 @@ function showRatingPanel(properties) {
   _ratings    = properties.map(() => RATING_DEFAULT);
   _currentIdx = 0;
 
+  // Ensure neighborhood layer is gone before survey starts
+  if (typeof window.clearNeighborhoodLayer === "function") {
+    window.clearNeighborhoodLayer();
+  }
+
   _buildPanel();
-  _renderCurrent();
 }
 
 //--------------------------------------------------------------------
-// Build the static panel shell (called once)
+// Build the full card-list panel
 //--------------------------------------------------------------------
 function _buildPanel() {
   const outputBox = document.getElementById("output-message");
@@ -40,111 +44,133 @@ function _buildPanel() {
   const panel = document.createElement("div");
   panel.id = "rating-panel";
 
-  panel.innerHTML = `
-    <div id="rating-progress"></div>
-    <div id="rating-card">
-      <div id="rating-neighborhood"></div>
-      <div id="rating-details"></div>
-      <div id="rating-question">How much do you like this property?</div>
-      <div id="rating-input-row">
-        <input type="number" id="rating-value" min="${RATING_MIN}" max="${RATING_MAX}" step="1" value="${RATING_DEFAULT}">
-        <span class="rating-label">&nbsp;/ ${RATING_MAX}</span>
-      </div>
-    </div>
-    <div id="rating-nav">
-      <button id="rating-prev">&#8592; Previous</button>
-      <button id="rating-next">Next &#8594;</button>
-    </div>
-  `;
+  // Header
+  const progress = document.createElement("div");
+  progress.id        = "rating-progress";
+  progress.textContent = `Rate below ${_properties.length} properties in scale of 0 – 10`;
+  panel.appendChild(progress);
+
+  // Scrollable card list
+  const list = document.createElement("div");
+  list.id = "rating-list";
+
+  _properties.forEach((prop, idx) => {
+    const card = _buildPropertyCard(prop, idx);
+    list.appendChild(card);
+  });
+  panel.appendChild(list);
+
+  // Submit button
+  const submitBtn = document.createElement("button");
+  submitBtn.id          = "rating-submit";
+  submitBtn.textContent = "Get Recommendations \u2192";
+  submitBtn.addEventListener("click", _onSubmit);
+  panel.appendChild(submitBtn);
 
   outputBox.appendChild(panel);
 
-  document.getElementById("rating-prev").addEventListener("click", _onPrev);
-  document.getElementById("rating-next").addEventListener("click", _onNext);
+  // Show all 10 property geometries on the map
+  if (typeof window.showAllSurveyPropertiesOnMap === "function") {
+    window.showAllSurveyPropertiesOnMap(_properties);
+  }
+
+  // Place all survey pins on the map (active = index 0)
+  if (typeof window.showSurveyPinsOnMap === "function") {
+    window.showSurveyPinsOnMap(_properties, 0);
+  }
+
+  // Activate first card (fits map to first property)
+  _setActiveCard(0, false);
 }
 
 //--------------------------------------------------------------------
-// Render the current property into the panel
+// Build a single property rating card
 //--------------------------------------------------------------------
-function _renderCurrent() {
-  const prop    = _properties[_currentIdx];
-  const total   = _properties.length;
-  const isFirst = _currentIdx === 0;
-  const isLast  = _currentIdx === total - 1;
+function _buildPropertyCard(prop, idx) {
+  const card = document.createElement("div");
+  card.className  = "rating-property-card";
+  card.dataset.idx = idx;
 
-  // Progress
-  document.getElementById("rating-progress").textContent =
-    `Property ${_currentIdx + 1} of ${total}`;
+  const rent  = prop.rent_knn    != null ? `$${Math.round(prop.rent_knn).toLocaleString()}/mo` : null;
+  const sqft  = prop.sqft        != null ? `${Math.round(prop.sqft)} sqft` : null;
+  const beds  = prop.bedroomnum  != null ? `${prop.bedroomnum} bd`  : null;
+  const baths = prop.bathroomnum != null ? `${prop.bathroomnum} ba` : null;
+  const chips = [rent, sqft, beds, baths].filter(Boolean);
 
-  // Neighborhood
-  document.getElementById("rating-neighborhood").textContent =
-    prop.small_n || "NYC";
+  card.innerHTML = `
+    <div class="rating-card-header">
+      <span class="rating-card-num">#${idx + 1}</span>
+      <span class="rating-card-hood">${prop.small_n || "NYC"}</span>
+    </div>
+    <div class="rating-card-chips">${
+      chips.map(c => `<span>${c}</span>`).join("")
+    }</div>
+    <div class="rating-card-score-row">
+      <label class="rating-card-score-label">Score</label>
+      <input type="number" class="rating-card-input"
+             min="${RATING_MIN}" max="${RATING_MAX}" step="1" value="${RATING_DEFAULT}">
+      <span class="rating-card-max">/ ${RATING_MAX}</span>
+    </div>`;
 
-  // Detail chips
-  const chips = [
-    `$${Math.round(prop.rent_knn).toLocaleString()}/mo`,
-    prop.sqft ? `${Math.round(prop.sqft)} sqft` : null,
-    `${prop.bedroomnum} bed`,
-    `${prop.bathroomnum} bath`,
-  ].filter(Boolean);
+  // Clicking the card body (not the input) makes it active
+  card.addEventListener("click", (e) => {
+    if (e.target.tagName === "INPUT") return;
+    _setActiveCard(idx, true);
+  });
 
-  document.getElementById("rating-details").innerHTML =
-    chips.map(c => `<span>${c}</span>`).join("");
+  // Score input keeps _ratings in sync
+  card.querySelector(".rating-card-input").addEventListener("input", (e) => {
+    const v = Number(e.target.value);
+    _ratings[idx] = Math.min(RATING_MAX, Math.max(RATING_MIN, isNaN(v) ? RATING_DEFAULT : v));
+  });
 
-  // Rating input — restore saved rating for this property
-  document.getElementById("rating-value").value = _ratings[_currentIdx];
+  return card;
+}
 
-  // Navigation buttons
-  const prevBtn = document.getElementById("rating-prev");
-  const nextBtn = document.getElementById("rating-next");
-  prevBtn.disabled = isFirst;
-  nextBtn.textContent = isLast ? "Get Recommendations" : "Next \u2192";
+//--------------------------------------------------------------------
+// Set the active (focused) card and show it on the map
+//--------------------------------------------------------------------
+function _setActiveCard(idx, scrollIntoView) {
+  _currentIdx = idx;
 
-  // Show this property's actual geometry on the map
-  if (typeof window.showSinglePropertyOnMap === "function") {
-    window.showSinglePropertyOnMap(prop);
+  document.querySelectorAll(".rating-property-card").forEach((c, i) => {
+    c.classList.toggle("active", i === idx);
+  });
+
+  if (scrollIntoView) {
+    const activeCard = document.querySelectorAll(".rating-property-card")[idx];
+    if (activeCard) activeCard.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  // Dim all pins, brighten the active one
+  if (typeof window.updateActiveSurveyPin === "function") {
+    window.updateActiveSurveyPin(idx);
+  }
+
+  // Fly map to this property
+  if (typeof window.flyToProperty === "function") {
+    window.flyToProperty(_properties[idx]);
   }
 }
 
 //--------------------------------------------------------------------
-// Save current rating then go to previous property
+// Submit — collect all ratings and call onRatingsSubmit
 //--------------------------------------------------------------------
-function _onPrev() {
-  _saveCurrentRating();
-  if (_currentIdx > 0) {
-    _currentIdx--;
-    _renderCurrent();
+function _onSubmit() {
+  // Sync any live input values into _ratings before sending
+  document.querySelectorAll(".rating-card-input").forEach((input, idx) => {
+    const v = Number(input.value);
+    _ratings[idx] = Math.min(RATING_MAX, Math.max(RATING_MIN, isNaN(v) ? RATING_DEFAULT : v));
+  });
+
+  const payload = _properties.map((prop, i) => ({
+    features: prop,
+    rating:   _ratings[i],
+  }));
+
+  if (typeof window.onRatingsSubmit === "function") {
+    window.onRatingsSubmit(payload);
   }
-}
-
-//--------------------------------------------------------------------
-// Save current rating then go to next property (or submit)
-//--------------------------------------------------------------------
-function _onNext() {
-  _saveCurrentRating();
-
-  if (_currentIdx < _properties.length - 1) {
-    _currentIdx++;
-    _renderCurrent();
-  } else {
-    // All properties rated — submit
-    const payload = _properties.map((prop, i) => ({
-      features: prop,
-      rating:   _ratings[i],
-    }));
-
-    if (typeof window.onRatingsSubmit === "function") {
-      window.onRatingsSubmit(payload);
-    }
-  }
-}
-
-//--------------------------------------------------------------------
-// Save the current input value into _ratings
-//--------------------------------------------------------------------
-function _saveCurrentRating() {
-  const raw = Number(document.getElementById("rating-value")?.value);
-  _ratings[_currentIdx] = Math.min(RATING_MAX, Math.max(RATING_MIN, isNaN(raw) ? RATING_DEFAULT : raw));
 }
 
 window.showRatingPanel = showRatingPanel;

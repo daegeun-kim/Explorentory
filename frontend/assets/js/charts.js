@@ -155,6 +155,22 @@ function _getHistogramBinWidth(col, span) {
 // Color helpers
 //--------------------------------------------------------------------
 
+/**
+ * Returns chart colors for the current dark/bright mode.
+ * Each value is a (dark, bright) pair; the right one is selected
+ * based on whether body.bright is active.
+ */
+function _chartColors() {
+  const bright = document.body.classList.contains("bright");
+  return {
+    axis:        bright ? "#aaa"                     : CHART_AXIS_COLOR,
+    text:        bright ? "#222"                     : CHART_TEXT_COLOR,
+    barFallback: bright ? "rgb(26, 107, 192)"        : CHART_BAR_COLOR_FALLBACK,
+    radarOuter:  bright ? "rgba(160, 165, 175, 0.6)" : RADAR_OUTER_COLOR,
+    radarGuide:  bright ? "rgba(150, 155, 165, 0.7)" : RADAR_GUIDE_COLOR,
+  };
+}
+
 /** Parse a 6-digit hex string to [r, g, b] in 0–255. */
 function _hexToRgb(hex) {
   const h = hex.replace("#", "");
@@ -171,7 +187,7 @@ function _hexToRgb(hex) {
  * Returns a CSS rgb() string.
  */
 function _interpolateColor(value, stops) {
-  if (!stops.length) return CHART_BAR_COLOR_FALLBACK;
+  if (!stops.length) return _chartColors().barFallback;
   if (value <= stops[0][0]) return stops[0][1];
   if (value >= stops[stops.length - 1][0]) return stops[stops.length - 1][1];
 
@@ -395,7 +411,8 @@ function _drawHistogram() {
   ctx.globalAlpha = 1;
 
   // Axes
-  ctx.strokeStyle = CHART_AXIS_COLOR;
+  const cc = _chartColors();
+  ctx.strokeStyle = cc.axis;
   ctx.lineWidth   = CHART_AXIS_LINE_WIDTH;
   ctx.beginPath();
   ctx.moveTo(m.left, plotTop);
@@ -410,7 +427,7 @@ function _drawHistogram() {
     return String(Math.round(v));
   };
 
-  ctx.fillStyle    = CHART_TEXT_COLOR;
+  ctx.fillStyle    = cc.text;
   ctx.font         = CHART_FONT_SMALL;
   ctx.textBaseline = "top";
   ctx.textAlign    = "left";
@@ -501,17 +518,18 @@ function _drawRadarTriangle() {
   }));
 
   // --- Outer triangle ---
+  const rc = _chartColors();
   ctx.beginPath();
   ctx.moveTo(verts[0].x, verts[0].y);
   ctx.lineTo(verts[1].x, verts[1].y);
   ctx.lineTo(verts[2].x, verts[2].y);
   ctx.closePath();
-  ctx.strokeStyle = RADAR_OUTER_COLOR;
+  ctx.strokeStyle = rc.radarOuter;
   ctx.lineWidth   = RADAR_OUTER_STROKE_WIDTH;
   ctx.stroke();
 
   // --- Guide lines from center to each vertex ---
-  ctx.strokeStyle = RADAR_GUIDE_COLOR;
+  ctx.strokeStyle = rc.radarGuide;
   ctx.lineWidth   = RADAR_GUIDE_LINE_WIDTH;
   ctx.setLineDash(RADAR_GUIDE_DASH);
   for (const v of verts) {
@@ -601,6 +619,14 @@ window.clearCharts = clearCharts;
 
 /** Called by the resize handle drag logic in main.js to redraw charts at new size. */
 window.resizeCharts = function () {
+  if (_chartsGeojson) {
+    _drawRadarTriangle();
+    _drawHistogram();
+  }
+};
+
+/** Called by main.js when the color mode toggles, to repaint charts with new colors. */
+window.redrawCharts = function () {
   if (_chartsGeojson) {
     _drawRadarTriangle();
     _drawHistogram();

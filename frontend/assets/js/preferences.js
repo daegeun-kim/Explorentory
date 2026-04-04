@@ -15,6 +15,9 @@ const ROOM_MAX          = 10;
 const BEDROOMS_DEFAULT  = 1;
 const BATHROOMS_DEFAULT = 1;
 
+// Default priority order (shown at startup)
+const DEFAULT_PRIORITY = ["rent", "location", "sqft"];
+
 //--------------------------------------------------------------------
 
 (function () {
@@ -48,25 +51,25 @@ const BATHROOMS_DEFAULT = 1;
     </div>
 
     <div class="pref-field">
-      <label class="pref-label">What matters most? Click in order of priority</label>
+      <label class="pref-label">Priority Order &mdash; drag to reorder</label>
       <div id="pref-priority-row">
-        <div class="pref-priority-card" data-key="rent">
+        <div class="pref-priority-card" data-key="rent"     draggable="true">
           <div class="pref-priority-rank"></div>
           <div class="pref-priority-name">Rent</div>
         </div>
-        <div class="pref-priority-card" data-key="location">
+        <div class="pref-priority-card" data-key="location" draggable="true">
           <div class="pref-priority-rank"></div>
           <div class="pref-priority-name">Location</div>
         </div>
-        <div class="pref-priority-card" data-key="sqft">
+        <div class="pref-priority-card" data-key="sqft"     draggable="true">
           <div class="pref-priority-rank"></div>
           <div class="pref-priority-name">Sq. Footage</div>
         </div>
       </div>
-      <div id="pref-priority-hint">Tap a card to rank it (1st = most important)</div>
+      <div id="pref-priority-hint">1st = most important &nbsp;·&nbsp; drag cards to reorder</div>
     </div>
 
-    <button id="pref-submit" disabled>Find Properties</button>
+    <button id="pref-submit">Find Properties</button>
   `;
 
   overlay.appendChild(modal);
@@ -80,44 +83,63 @@ const BATHROOMS_DEFAULT = 1;
     rentValue.textContent = Number(rentSlider.value).toLocaleString();
   });
 
-  // ---- Priority ranking logic ----
-  let priorityOrder = []; // e.g. ["rent", "location", "sqft"] in order clicked
+  // ---- Priority drag-and-drop ----
+  let priorityOrder = [...DEFAULT_PRIORITY];
+  let _draggedKey   = null;
 
-  const cards     = modal.querySelectorAll(".pref-priority-card");
-  const submitBtn = document.getElementById("pref-submit");
+  const cards      = modal.querySelectorAll(".pref-priority-card");
+  const submitBtn  = document.getElementById("pref-submit");
+  const priorityRow = document.getElementById("pref-priority-row");
 
   function refreshCards() {
-    cards.forEach((card) => {
-      const key    = card.dataset.key;
-      const rank   = priorityOrder.indexOf(key); // -1 if not selected
+    // Re-order DOM cards to match priorityOrder, update rank badges
+    priorityOrder.forEach((key, rank) => {
+      const card   = priorityRow.querySelector(`[data-key="${key}"]`);
       const rankEl = card.querySelector(".pref-priority-rank");
-
-      if (rank === -1) {
-        card.classList.remove("selected");
-        rankEl.textContent = "";
-      } else {
-        card.classList.add("selected");
-        rankEl.textContent = rank + 1; // 1-based label
-      }
+      rankEl.textContent = rank + 1;
+      card.classList.add("selected");
+      // Move to correct visual position
+      priorityRow.appendChild(card);
     });
-
-    submitBtn.disabled = priorityOrder.length < 3;
   }
 
   cards.forEach((card) => {
-    card.addEventListener("click", () => {
-      const key  = card.dataset.key;
-      const rank = priorityOrder.indexOf(key);
+    card.addEventListener("dragstart", (e) => {
+      _draggedKey = card.dataset.key;
+      card.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
 
-      if (rank === -1) {
-        // Not yet ranked — add if slots remain
-        if (priorityOrder.length < 3) {
-          priorityOrder.push(key);
-        }
-      } else {
-        // Already ranked — remove this card and all ranked after it
-        priorityOrder = priorityOrder.slice(0, rank);
-      }
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+      cards.forEach(c => c.classList.remove("drag-over"));
+    });
+
+    card.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (card.dataset.key !== _draggedKey) card.classList.add("drag-over");
+    });
+
+    card.addEventListener("dragleave", () => {
+      card.classList.remove("drag-over");
+    });
+
+    card.addEventListener("drop", (e) => {
+      e.preventDefault();
+      card.classList.remove("drag-over");
+      const targetKey = card.dataset.key;
+      if (!_draggedKey || _draggedKey === targetKey) return;
+
+      // Move dragged key to the position of target key
+      const dragIdx = priorityOrder.indexOf(_draggedKey);
+      const dropIdx = priorityOrder.indexOf(targetKey);
+      if (dragIdx === -1 || dropIdx === -1) return;
+
+      priorityOrder.splice(dragIdx, 1);
+      // Recalculate drop index after removal
+      const newDropIdx = priorityOrder.indexOf(targetKey);
+      priorityOrder.splice(newDropIdx, 0, _draggedKey);
 
       refreshCards();
     });
@@ -125,7 +147,7 @@ const BATHROOMS_DEFAULT = 1;
 
   refreshCards();
 
-  // ---- Submit ----
+  // ---- Submit (always enabled — all 3 are always ranked) ----
   submitBtn.addEventListener("click", () => {
     const rent      = Number(rentSlider.value);
     const bedrooms  = Math.max(ROOM_MIN, Number(document.getElementById("pref-bedrooms").value));
@@ -140,7 +162,7 @@ const BATHROOMS_DEFAULT = 1;
 
   // ---- Public API ----
   window.showPreferencesModal = function () {
-    priorityOrder = [];
+    priorityOrder = [...DEFAULT_PRIORITY];
     refreshCards();
     overlay.style.display = "flex";
   };

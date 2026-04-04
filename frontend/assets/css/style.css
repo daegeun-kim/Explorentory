@@ -193,6 +193,45 @@ body {
   font-weight: 700;
 }
 
+/* 2D/3D toggle + North align buttons — always visible, top-right of map */
+#map-view-buttons {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 5;
+  pointer-events: all;
+}
+
+#btn-pitch-toggle,
+#btn-north-reset {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(16, 16, 19, 0.88);
+  color: #ffffff;
+  font-family: "Roboto", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+  line-height: 1;
+}
+
+#btn-pitch-toggle:hover,
+#btn-north-reset:hover {
+  background: rgba(30, 30, 38, 0.96);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 #map {
   width: 100%;
   height: 100%;
@@ -442,12 +481,12 @@ body {
   background: var(--bg-modal);
   border: 1px solid var(--border);
   border-radius: var(--radius-modal);
-  padding: 36px 40px;
-  width: 380px;
-  max-width: 90vw;
+  padding: 40px 48px;
+  width: 520px;
+  max-width: 92vw;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
   color: var(--text-primary);
   font-family: "Roboto", sans-serif;
 }
@@ -551,13 +590,13 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 12px 8px;
+  padding: 16px 8px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--bg-input);
-  cursor: pointer;
+  cursor: grab;
   user-select: none;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, opacity 0.15s;
 }
 
 .pref-priority-card:hover {
@@ -567,6 +606,17 @@ body {
 .pref-priority-card.selected {
   border-color: var(--accent);
   background: var(--bg-selected);
+}
+
+.pref-priority-card.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+.pref-priority-card.drag-over {
+  border-color: var(--accent);
+  background: var(--bg-selected);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .pref-priority-rank {
@@ -672,10 +722,10 @@ body {
 }
 
 #rating-progress {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.3;
   flex-shrink: 0;
 }
 
@@ -776,6 +826,125 @@ body {
 }
 
 #rating-next:hover {
+  background: var(--accent-hover);
+}
+
+/* ------------- Rating panel — all-cards layout ------------- */
+#rating-list {
+  flex: 1 1 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: #444 #1a1a1a;
+}
+
+.rating-property-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.rating-property-card:hover {
+  border-color: var(--accent);
+}
+
+.rating-property-card.active {
+  border-color: var(--accent);
+  background: var(--bg-selected);
+}
+
+.rating-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.rating-card-num {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.rating-card-hood {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-white);
+  line-height: 1.1;
+}
+
+.rating-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.rating-card-chips span {
+  font-size: 12px;
+  color: var(--text-label);
+  background: var(--bg-message);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.rating-card-score-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.rating-card-score-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.rating-card-input {
+  width: 72px;
+  padding: 4px 8px;
+  border-radius: var(--radius-input);
+  background: var(--bg-input);
+  border: 1px solid var(--accent);
+  color: var(--text-white);
+  font-size: 28px;
+  font-family: "Roboto", sans-serif;
+  font-weight: 700;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.rating-card-max {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+#rating-submit {
+  flex-shrink: 0;
+  padding: 10px;
+  border-radius: var(--radius-btn);
+  background: var(--accent);
+  border: none;
+  color: #000;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: "Roboto", sans-serif;
+}
+
+#rating-submit:hover {
   background: var(--accent-hover);
 }
 
@@ -929,12 +1098,85 @@ body {
   }
 }
 
-/* ------------- Color invert mode ------------- */
-body.inverted {
-  filter: invert(1) hue-rotate(180deg);
+/* ------------- Bright mode (body.bright) — explicit color overrides ------------- */
+body.bright {
+  --accent:          rgb(26, 107, 192);
+  --accent-hover:    rgb(50, 130, 220);
+  --bg-body:         #e8edf2;
+  --bg-dark:         #f5f7fa;
+  --bg-modal:        #ffffff;
+  --bg-input:        #e0e4ea;
+  --bg-card:         #ffffff;
+  --bg-message:      #dde2e8;
+  --bg-muted:        #c0c7d0;
+  --bg-selected:     rgb(210, 228, 248);
+  --bg-user-bubble:  rgb(90, 150, 210);
+  --border:          rgb(200, 208, 218);
+  --border-card:     rgb(210, 218, 228);
+  --text-primary:    rgb(20, 20, 20);
+  --text-label:      rgb(80, 80, 80);
+  --text-secondary:  rgb(100, 100, 100);
+  --text-muted:      rgb(130, 130, 130);
+  --text-dimmed:     rgb(150, 150, 150);
+  --text-soft:       rgb(40, 40, 40);
+  --text-white:      #000000;
 }
 
-/* Cancel invert on the map so tiles stay readable */
-body.inverted #map {
-  filter: invert(1) hue-rotate(180deg);
+/* Scrollbars */
+body.bright #output-message { scrollbar-color: #999 #e0e4ea; }
+body.bright #rating-list    { scrollbar-color: #999 #e0e4ea; }
+
+/* Rating section hardcoded white text */
+body.bright #rating-progress { color: #111; }
+
+/* Map loading spinner */
+body.bright .map-spinner {
+  border: 4px solid rgba(0, 0, 0, 0.15);
+  border-top-color: #333;
+}
+
+/* Choropleth mode buttons */
+body.bright .choropleth-btn {
+  background: rgba(248, 249, 252, 0.92);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+body.bright .choropleth-btn:hover {
+  background: rgba(235, 238, 245, 0.98);
+  border-color: var(--accent);
+}
+body.bright .choropleth-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* Map view buttons (2D/3D, North) */
+body.bright #btn-pitch-toggle,
+body.bright #btn-north-reset {
+  background: rgba(255, 255, 255, 0.92);
+  color: #222;
+  border-color: rgba(0, 0, 0, 0.15);
+}
+body.bright #btn-pitch-toggle:hover,
+body.bright #btn-north-reset:hover {
+  background: rgba(240, 242, 248, 0.98);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Map hover tooltip */
+body.bright .maplibregl-popup-content {
+  background: rgba(255, 255, 255, 0.97);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #111;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+body.bright .tt-label { color: rgba(0, 0, 0, 0.55); }
+body.bright .tt-value { color: #000; }
+
+/* Histogram tooltip */
+body.bright #histogram-tooltip {
+  background: rgba(255, 255, 255, 0.97);
+  color: #111;
+  border-color: rgba(0, 0, 0, 0.18);
 }
