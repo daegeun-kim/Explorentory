@@ -109,6 +109,7 @@ function clearPlaceholders() {
 //--------------------------------------------------------------------
 window.onPreferencesSubmit = async function (prefs) {
   currentPreferences = prefs;
+  window.currentPreferences = currentPreferences;
   clearPlaceholders();
   _setStage(2);
   showMapLoading();
@@ -144,13 +145,14 @@ window.onPreferencesSubmit = async function (prefs) {
 //--------------------------------------------------------------------
 window.onNeighborhoodSubmit = async function (neighborhood) {
   _setStage(3);
-  // Merge neighborhood centroid coordinates into preferences (not the name)
   currentPreferences = {
     ...currentPreferences,
+    neighborhood_name:     neighborhood.name,
     neighborhood_lon:      neighborhood.lon,
     neighborhood_lat:      neighborhood.lat,
     neighborhood_borocode: neighborhood.borocode,
   };
+  window.currentPreferences = currentPreferences;
 
   if (typeof window.clearNeighborhoodLayer === "function") {
     window.clearNeighborhoodLayer();
@@ -191,6 +193,77 @@ window.onNeighborhoodSubmit = async function (neighborhood) {
     setStatusMessage(`Connection error. Is the backend running on ${API_BASE}?`);
   }
 };
+
+//--------------------------------------------------------------------
+// LLM explain helper — calls /explain and renders response into containerEl
+//--------------------------------------------------------------------
+async function _callExplain(propertyProps, containerEl) {
+  if (!currentPreferences) return;
+
+  const btn = containerEl.querySelector(".explain-btn");
+  if (btn) btn.disabled = true;
+
+  // Remove any previous response/spinner and show spinner immediately
+  let spinnerEl = containerEl.querySelector(".explain-spinner");
+  let responseEl = containerEl.querySelector(".explain-response");
+  if (spinnerEl)  spinnerEl.remove();
+  if (responseEl) responseEl.remove();
+
+  spinnerEl = document.createElement("div");
+  spinnerEl.className = "explain-spinner";
+  containerEl.appendChild(spinnerEl);
+
+  const userPrefs = {
+    target_rent:  currentPreferences.rent,
+    bedroomnum:   currentPreferences.bedrooms,
+    bathroomnum:  currentPreferences.bathrooms,
+    priority:     currentPreferences.priority_order,
+    concern:      currentPreferences.concern || "",
+    neighborhood: currentPreferences.neighborhood_name || "",
+  };
+
+  const propInfo = {
+    rent:          propertyProps.rent_knn,
+    livingroomnum: propertyProps.livingroomnum,
+    bedroomnum:    propertyProps.bedroomnum,
+    bathroomnum:   propertyProps.bathroomnum,
+    sqft:          propertyProps.sqft,
+    borocode:      propertyProps.borocode,
+    built_year:    propertyProps.built_year,
+    height_roof:   propertyProps.heightroof,
+    small_n:       propertyProps.small_n,
+    large_n:       propertyProps.large_n,
+    elevator:      propertyProps.elevator,
+    bld_story:     propertyProps.bld_story,
+    zoning:        propertyProps.zoning,
+    bldg_class:    propertyProps.bldg_class,
+    bld_type:      propertyProps.bld_type,
+  };
+
+  let text;
+  try {
+    const res  = await fetch(`${API_BASE}/explain`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ user_prefs: userPrefs, property_info: propInfo }),
+    });
+    const data = await res.json();
+    text = data.error ? `Error: ${data.error}` : data.explanation;
+  } catch (_err) {
+    text = "Connection error.";
+  }
+
+  // Swap spinner for the response text
+  spinnerEl.remove();
+  responseEl = document.createElement("div");
+  responseEl.className   = "explain-response";
+  responseEl.textContent = text;
+  containerEl.appendChild(responseEl);
+
+  if (btn) btn.disabled = false;
+}
+
+window.triggerExplain = _callExplain;
 
 //--------------------------------------------------------------------
 // Top-10 listing — shown in the right sidebar after recommendations load
@@ -241,6 +314,15 @@ function _showTop10Listing(geojson) {
       if (typeof window.flyToProperty         === "function") window.flyToProperty(p);
       if (typeof window.highlightPropertyOnMap === "function") window.highlightPropertyOnMap(f);
     });
+
+    const explainBtn = document.createElement("button");
+    explainBtn.className   = "explain-btn";
+    explainBtn.textContent = "Explain";
+    explainBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      _callExplain(p, card);
+    });
+    card.appendChild(explainBtn);
 
     wrap.appendChild(card);
   });
@@ -400,6 +482,7 @@ document.addEventListener("mouseup", () => {
 if (resetBtn) {
   resetBtn.addEventListener("click", () => {
     currentPreferences = null;
+    window.currentPreferences = null;
 
     if (typeof clearAllSources === "function") clearAllSources();
     if (typeof window.clearCharts === "function") window.clearCharts();

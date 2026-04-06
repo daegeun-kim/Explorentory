@@ -69,6 +69,11 @@ const PRIORITY_KEYS = ["rent", "location", "sqft"];
       <div id="pref-priority-hint">Click 1st → 2nd → 3rd &nbsp;·&nbsp; click again to unrank</div>
     </div>
 
+    <div class="pref-field">
+      <label class="pref-label" for="pref-concern">Any other concerns?</label>
+      <textarea id="pref-concern" placeholder="Describe your concerns for a new place in NYC — commute, noise, safety, pet-friendliness, etc."></textarea>
+    </div>
+
     <button id="pref-submit" disabled>Find Properties</button>
   `;
 
@@ -135,11 +140,12 @@ const PRIORITY_KEYS = ["rent", "location", "sqft"];
     const rent      = Number(rentSlider.value);
     const bedrooms  = Math.max(ROOM_MIN, Number(document.getElementById("pref-bedrooms").value));
     const bathrooms = Math.max(ROOM_MIN, Number(document.getElementById("pref-bathrooms").value));
+    const concern   = (document.getElementById("pref-concern").value || "").trim();
 
     overlay.style.display = "none";
 
     if (typeof window.onPreferencesSubmit === "function") {
-      window.onPreferencesSubmit({ rent, bedrooms, bathrooms, priority_order: _selection });
+      window.onPreferencesSubmit({ rent, bedrooms, bathrooms, priority_order: _selection, concern });
     }
   });
 
@@ -147,6 +153,8 @@ const PRIORITY_KEYS = ["rent", "location", "sqft"];
   window.showPreferencesModal = function () {
     _selection = [];
     _refreshPriorityCards();
+    const concernEl = document.getElementById("pref-concern");
+    if (concernEl) concernEl.value = "";
     overlay.style.display = "flex";
   };
 })();

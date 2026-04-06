@@ -544,6 +544,23 @@ body {
   flex-direction: column;
 }
 
+#pref-concern {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-input);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-white);
+  font-size: 13px;
+  font-family: "Roboto", sans-serif;
+  line-height: 1.45;
+  resize: vertical;
+  min-height: 68px;
+  box-sizing: border-box;
+}
+
+#pref-concern::placeholder { color: var(--text-dimmed); }
+
 .pref-field-row {
   display: flex;
   gap: 16px;
@@ -1249,4 +1266,68 @@ body.bright #histogram-tooltip {
   font-size: 12px;
   flex-shrink: 0;
   padding: 0 2px;
+}
+
+/* ------------- Explain button + LLM response ------------- */
+.explain-btn {
+  margin-top: 7px;
+  padding: 3px 11px;
+  border-radius: 12px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-family: "Roboto", sans-serif;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  display: inline-block;
+}
+
+.explain-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #000;
+}
+
+.explain-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.explain-response {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.explain-spinner {
+  width: 22px;
+  height: 22px;
+  margin-top: 8px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top: 3px solid var(--accent);
+  border-radius: 50%;
+  animation: mapSpin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+
+body.bright .explain-spinner {
+  border-color: rgba(0, 0, 0, 0.12);
+  border-top-color: var(--accent);
+}
+
+/* Explain popup container (inside MapLibre popup) */
+.explain-popup-inner {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Bright mode overrides */
+body.bright #pref-concern {
+  border-color: var(--border);
+  color: var(--text-white);
+}
+
+body.bright .explain-response {
+  color: var(--text-secondary);
 }

@@ -164,6 +164,9 @@ window.map = map;
 // Shared hover popup instance for recommendation tooltips
 let _hoverPopup = null;
 
+// Click-pinned popup that stays open and hosts the Explain button / LLM response
+let _explainClickPopup = null;
+
 // Store last recommendation GeoJSON for mode switching
 let _currentRecommendationsGeojson = null;
 let _activeChoroplethModeId = DEFAULT_CHOROPLETH_MODE_ID;
@@ -252,7 +255,8 @@ function clearAllSources() {
   });
   if (map.getSource(propertiesSourceId))        map.removeSource(propertiesSourceId);
   if (map.getSource(recommendationsPointSrcId)) map.removeSource(recommendationsPointSrcId);
-  if (_hoverPopup) { _hoverPopup.remove(); _hoverPopup = null; }
+  if (_hoverPopup)        { _hoverPopup.remove();        _hoverPopup        = null; }
+  if (_explainClickPopup) { _explainClickPopup.remove(); _explainClickPopup = null; }
   clearPropertyHighlight();
   clearSurveyPin();
 
@@ -855,6 +859,53 @@ function _attachClickHighlight(layerId) {
   });
 }
 
+//--------------------------------------------------------------------
+// _attachExplainClickPopup
+// On layer click: closes any previous explain popup, opens a new one
+// at the click location with property info + Explain button.
+// The LLM response is rendered inside the popup below the button.
+//--------------------------------------------------------------------
+function _attachExplainClickPopup(layerId) {
+  map.on("click", layerId, (e) => {
+    if (!e.features.length) return;
+    const props = e.features[0].properties;
+
+    // Close previous popup
+    if (_explainClickPopup) { _explainClickPopup.remove(); _explainClickPopup = null; }
+
+    // Build popup DOM
+    const container = document.createElement("div");
+    container.className = "explain-popup-inner";
+
+    const btn = document.createElement("button");
+    btn.className   = "explain-btn";
+    btn.textContent = "Explain";
+    container.appendChild(btn);
+
+    const responseEl = document.createElement("div");
+    responseEl.className = "explain-response";
+    container.appendChild(responseEl);
+
+    btn.addEventListener("click", () => {
+      if (typeof window.triggerExplain === "function") {
+        window.triggerExplain(props, container);
+      }
+    });
+
+    _explainClickPopup = new maplibregl.Popup({
+      closeButton:  true,
+      closeOnClick: false,
+      maxWidth:     "260px",
+      offset:       12,
+    })
+      .setLngLat(e.lngLat)
+      .setDOMContent(container)
+      .addTo(map);
+
+    _explainClickPopup.on("close", () => { _explainClickPopup = null; });
+  });
+}
+
 function _attachHoverTooltip(layerId) {
   map.on("mousemove", layerId, (e) => {
     if (!e.features.length) return;
@@ -927,10 +978,11 @@ function _applyRecommendationLayers(geojsonObj, colorExpr, fitPadding) {
       beforeExtId:  "building3D",
     });
 
-    // Attach hover tooltips and click highlight to fill + extrusion + circle layers
+    // Attach hover tooltips, click highlight, and explain popup to all three layers
     [propFillId, propExtId, propCircleId].forEach(id => {
       _attachHoverTooltip(id);
       _attachClickHighlight(id);
+      _attachExplainClickPopup(id);
     });
 
     _attachMapEmptyClickHandler();

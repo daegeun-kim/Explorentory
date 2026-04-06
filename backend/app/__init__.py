@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from .db import get_filtered_properties, get_neighborhoods
 from .recommend import run_recommendation
+from .llm.llm_router import explain_property
 
 app = FastAPI()
 
@@ -33,6 +34,23 @@ class RatedProperty(BaseModel):
 class RecommendPayload(BaseModel):
     preferences: Preferences
     ratings: List[RatedProperty]
+
+
+class ExplainPayload(BaseModel):
+    user_prefs: Dict[str, Any]
+    property_info: Dict[str, Any]
+
+
+@app.post("/explain")
+def get_explanation(payload: ExplainPayload):
+    print(f"\n[API] POST /explain  concern='{payload.user_prefs.get('concern', '')[:60]}'")
+    try:
+        text = explain_property(payload.user_prefs, payload.property_info)
+        print(f"[API] /explain done ({len(text)} chars)")
+        return {"explanation": text, "error": None}
+    except Exception as e:
+        print(f"[API] /explain error: {e}")
+        return {"explanation": None, "error": str(e)}
 
 
 @app.get("/neighborhoods")
