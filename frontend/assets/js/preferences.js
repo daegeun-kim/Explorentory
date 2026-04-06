@@ -71,7 +71,7 @@ const PRIORITY_KEYS = ["rent", "location", "sqft"];
 
     <div class="pref-field">
       <label class="pref-label" for="pref-concern">Any other concerns?</label>
-      <textarea id="pref-concern" placeholder="Describe your concerns for a new place in NYC — commute, noise, safety, pet-friendliness, etc."></textarea>
+      <textarea id="pref-concern" placeholder="Describe your concerns for a new place in NYC — commute, noise, green space proximity, etc."></textarea>
     </div>
 
     <button id="pref-submit" disabled>Find Properties</button>

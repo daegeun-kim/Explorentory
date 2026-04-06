@@ -23,7 +23,20 @@ FEATURE_COLS = [
     "borocode",
     "built_year",
     "bld_story",
+    "elevator",
+    "dist_greenspace_ft",
+    "dist_subway_ft",
+    "noise_level_ord",   # ordinal-encoded from noise_level string
 ]
+
+# Mapping from noise_level string → ordinal integer
+NOISE_LEVEL_MAP = {
+    "very low": 0,
+    "low":      1,
+    "medium":   2,
+    "high":     3,
+    "very high": 4,
+}
 
 # Top N recommendations to return (unique BIN)
 TOP_N = 3000
@@ -99,6 +112,16 @@ def run_recommendation(gdf, ratings, priority_order=None, user_prefs=None):
         gdf = gdf.to_crs("EPSG:4326")
         print("[recommend] reprojected to EPSG:4326")
 
+        # --- Encode categorical noise_level → ordinal before numeric coercion ---
+        if "noise_level" in gdf.columns:
+            gdf["noise_level_ord"] = (
+                gdf["noise_level"].astype(str).str.lower().str.strip()
+                .map(NOISE_LEVEL_MAP)
+                .fillna(2)   # default: medium
+            )
+        else:
+            gdf["noise_level_ord"] = 2.0
+
         # --- Coerce numeric feature columns ---
         for col in FEATURE_COLS:
             gdf[col] = pd.to_numeric(gdf[col], errors="coerce").fillna(0)
@@ -120,14 +143,20 @@ def run_recommendation(gdf, ratings, priority_order=None, user_prefs=None):
 
         for rated in ratings:
             feats = rated.features
+            noise_str = str(feats.get("noise_level") or "medium").lower().strip()
+            noise_ord = float(NOISE_LEVEL_MAP.get(noise_str, 2))
             row = [
-                float(feats.get("rent_knn")  or 0),
-                float(feats.get("sqft")       or 0),
-                float(feats.get("bedroomnum") or 0),
-                float(feats.get("bathroomnum") or 0),
-                float(feats.get("borocode")   or 0),
-                float(feats.get("built_year") or 0),
-                float(feats.get("bld_story")  or 0),
+                float(feats.get("rent_knn")          or 0),
+                float(feats.get("sqft")               or 0),
+                float(feats.get("bedroomnum")         or 0),
+                float(feats.get("bathroomnum")        or 0),
+                float(feats.get("borocode")           or 0),
+                float(feats.get("built_year")         or 0),
+                float(feats.get("bld_story")          or 0),
+                float(bool(feats.get("elevator"))),
+                float(feats.get("dist_greenspace_ft") or 0),
+                float(feats.get("dist_subway_ft")     or 0),
+                noise_ord,
             ]
             X_train_rows.append(row)
             y_train_list.append(float(rated.rating))

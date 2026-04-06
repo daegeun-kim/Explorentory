@@ -20,24 +20,45 @@ const CHOROPLETH_EPSILON = 1e-9;
 // Dark mode — neon/bright ramps that read on a dark basemap
 const CHOROPLETH_MODES_DARK = [
   {
-    id: "score",   label: "Score",      col: "final_score", stops: 5,
+    id: "score",   label: "Score",             col: "final_score",        stops: 5,
     colors: ["#ff5571", "#ff9886", "#fffef2", "#7eff43", "#18f197"],
   },
   {
-    id: "rent",    label: "Rent",       col: "rent_knn",    stops: 5,
+    id: "rent",    label: "Rent",              col: "rent_knn",           stops: 5,
     colors: ["#003ab8", "#0044ff", "#167bff", "#33cfff", "#ffffff"],
   },
   {
-    id: "sqft",    label: "Sqft",       col: "sqft",        stops: 5,
+    id: "sqft",    label: "Sqft",              col: "sqft",               stops: 5,
     colors: ["#00575a", "#0098b3", "#00c1cf", "#0dffd7", "#ffffff"],
   },
   {
-    id: "built",   label: "Built Year", col: "built_year",  stops: 5,
+    id: "built",   label: "Built Year",        col: "built_year",         stops: 5,
     colors: ["#6e2300", "#b93500", "#ff5917", "#ff985d", "#ffffff"],
   },
   {
-    id: "stories", label: "Stories",    col: "bld_story",   stops: 5,
+    id: "stories", label: "Stories",           col: "bld_story",          stops: 5,
     colors: ["#630070", "#9300a7", "#f713ff", "#ff75ff", "#ffffff"],
+  },
+  {
+    id: "elevator",label: "Elevator",          col: "elevator",           fixedStops: [0, 1],
+    colors: ["#b7d5e6", "#98ee48"],
+  },
+  {
+    id: "park",       label: "Major Park Distance", col: "dist_major_park_ft", stops: 5,
+    colors: ["#18f18c", "#0dbe42", "#a8c051", "#d8ae61", "#dd6a6a"],
+  },
+  {
+    id: "greenspace", label: "Green Space Distance", col: "dist_greenspace_ft", stops: 5,
+    colors: ["#18f18c", "#0dbe42", "#a8c051", "#d8ae61", "#dd6a6a"],
+  },
+  {
+    id: "subway",     label: "Subway Distance",    col: "dist_subway_ft",     stops: 5,
+    colors: ["#002477", "#0052aa", "#0090dd", "#33cfff", "#ffffff"],
+  },
+  {
+    id: "noise",      label: "Noise Level",     col: "noise_level_ord",
+    fixedStops: [0, 1, 2, 3, 4],
+    colors: ["#00d4ff", "#6ecc00", "#ffe000", "#ff7700", "#ff1111"],
   },
 ];
 
@@ -45,24 +66,45 @@ const CHOROPLETH_MODES_DARK = [
 // Avoids near-white endpoints; all stops visible on a white/light-grey background
 const CHOROPLETH_MODES_BRIGHT = [
   {
-    id: "score",   label: "Score",      col: "final_score", stops: 5,
+    id: "score",   label: "Score",             col: "final_score",        stops: 5,
     colors: ["#9e0020", "#c44000", "#646464", "#3da700", "#005c36"],
   },
   {
-    id: "rent",    label: "Rent",       col: "rent_knn",    stops: 5,
+    id: "rent",    label: "Rent",              col: "rent_knn",           stops: 5,
     colors: ["#9fd4ff", "#499eff", "#0050c8", "#002c93", "#000850"],
   },
   {
-    id: "sqft",    label: "Sqft",       col: "sqft",        stops: 5,
+    id: "sqft",    label: "Sqft",              col: "sqft",               stops: 5,
     colors: ["#a0ffff", "#3dfff2", "#00d3d7", "#008686", "#005a5a"],
   },
   {
-    id: "built",   label: "Built Year", col: "built_year",  stops: 5,
+    id: "built",   label: "Built Year",        col: "built_year",         stops: 5,
     colors: ["#ffc3ad", "#ff915e", "#ef5d0f", "#923f00", "#4d2100"],
   },
   {
-    id: "stories", label: "Stories",    col: "bld_story",   stops: 5,
+    id: "stories", label: "Stories",           col: "bld_story",          stops: 5,
     colors: ["#f6aeff", "#ea72ff", "#c50dde", "#8c028c", "#3e003e"],
+  },
+  {
+    id: "elevator",   label: "Elevator",       col: "elevator",           fixedStops: [0, 1],
+    colors: ["#426174", "#5dad12"],
+  },
+  {
+    id: "park",       label: "Major Park Distance", col: "dist_major_park_ft", stops: 5,
+    colors: ["#005c30", "#3a7800", "#859b37", "#835e1a", "#961515"],
+  },
+  {
+    id: "greenspace", label: "Green Space Distance", col: "dist_greenspace_ft", stops: 5,
+    colors: ["#005c30", "#3a7800", "#859b37", "#835e1a", "#961515"],
+  },
+  {
+    id: "subway",     label: "Subway Distance",    col: "dist_subway_ft",     stops: 5,
+    colors: ["#ccecfc", "#6bbcf7", "#1988ce", "#006caf", "#003874"],
+  },
+  {
+    id: "noise",      label: "Noise Level",     col: "noise_level_ord",
+    fixedStops: [0, 1, 2, 3, 4],
+    colors: ["#004455", "#336600", "#665500", "#883300", "#660000"],
   },
 ];
 
@@ -144,8 +186,6 @@ const TOOLTIP_FIELDS = [
   { key: "livingroomnum", label: "Living Rooms" },
   { key: "bedroomnum",    label: "Bedrooms" },
   { key: "bathroomnum",   label: "Bathrooms" },
-  { key: "built_year",    label: "Built Year" },
-  { key: "bld_story",     label: "Stories" },
 ];
 
 //--------------------------------------------------------------------
@@ -395,6 +435,26 @@ function _getQuantiles5(geojsonObj, col) {
 //--------------------------------------------------------------------
 function _buildColorExpr(geojsonObj, mode) {
   const c = mode.colors;
+
+  // Fixed stops — skip quantile computation, use literal value array.
+  // ["to-number"] ensures booleans (true/false from GeoJSON) are treated as numbers.
+  if (mode.fixedStops) {
+    const fv       = mode.fixedStops;
+    const pairs    = fv.map((v, i) => [v, c[i]]);
+    const numInput = ["to-number", ["get", mode.col], 0];
+    if (fv.length === 2) {
+      // step: input < fv[1] → c[0], input >= fv[1] → c[1]
+      return {
+        expr:  ["step", numInput, c[0], fv[1], c[1]],
+        stops: pairs,
+      };
+    }
+    // Multi-value interpolate (e.g. noise ordinal 0–4)
+    const interpArgs = ["interpolate", ["linear"], numInput];
+    fv.forEach((v, i) => interpArgs.push(v, c[i]));
+    return { expr: interpArgs, stops: pairs };
+  }
+
   if (mode.stops === 5) {
     const q = _getQuantiles5(geojsonObj, mode.col);
     if (!q) return { expr: c[2], stops: [] };
@@ -416,25 +476,28 @@ function _buildColorExpr(geojsonObj, mode) {
 }
 
 //--------------------------------------------------------------------
-// Mode buttons: init click listeners + update choropleth paint props
+// Mode dropdown: build a <select> with all choropleth modes
 //--------------------------------------------------------------------
-function _initModeButtons() {
+function _initModeDropdown() {
   const container = document.getElementById("choropleth-mode-buttons");
   if (!container) return;
 
-  container.style.display = "flex";
+  container.style.display = "block";
+  container.innerHTML = "";
 
-  // Reset all buttons, activate default
-  container.querySelectorAll(".choropleth-btn").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.mode === _activeChoroplethModeId);
-    // Replace old listener by cloning
-    const fresh = btn.cloneNode(true);
-    btn.replaceWith(fresh);
+  const select = document.createElement("select");
+  select.id = "choropleth-mode-select";
+
+  _getChoroplethModes().forEach(mode => {
+    const opt = document.createElement("option");
+    opt.value       = mode.id;
+    opt.textContent = mode.label;
+    opt.selected    = (mode.id === _activeChoroplethModeId);
+    select.appendChild(opt);
   });
 
-  container.querySelectorAll(".choropleth-btn").forEach(btn => {
-    btn.addEventListener("click", () => updateChoroplethMode(btn.dataset.mode));
-  });
+  select.addEventListener("change", () => updateChoroplethMode(select.value));
+  container.appendChild(select);
 }
 
 function updateChoroplethMode(modeId) {
@@ -452,14 +515,12 @@ function updateChoroplethMode(modeId) {
     map.setPaintProperty(propFillId, "fill-color", colorExpr);
   }
   if (map.getLayer(propCircleId)) {
-    map.setPaintProperty(propCircleId, "circle-color",        colorExpr);
-    map.setPaintProperty(propCircleId, "circle-stroke-color", colorExpr);
+    map.setPaintProperty(propCircleId, "circle-color", colorExpr);
   }
 
-  // Update button active states
-  document.querySelectorAll(".choropleth-btn").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.mode === modeId);
-  });
+  // Sync dropdown selection
+  const sel = document.getElementById("choropleth-mode-select");
+  if (sel) sel.value = modeId;
 
   // Notify charts — pass value/color stops so histogram bars can match the map
   if (typeof window.onChoroplethModeChange === "function") {
@@ -485,11 +546,9 @@ function _addPropertyTripleLayers(opts) {
     id: circleId, type: "circle", source: ptSourceId,
     maxzoom: PROP_CIRCLE_MAX_ZOOM,
     paint: {
-      "circle-radius":       PROP_CIRCLE_RADIUS,
-      "circle-color":        colorExpr,
-      "circle-stroke-color": _c().circleStroke,
-      "circle-stroke-width": PROP_CIRCLE_STROKE_WIDTH,
-      "circle-opacity":      PROP_CIRCLE_OPACITY,
+      "circle-radius":  PROP_CIRCLE_RADIUS,
+      "circle-color":   colorExpr,
+      "circle-opacity": PROP_CIRCLE_OPACITY,
     },
   };
   if (useSortKey) circleLayer.layout = { "circle-sort-key": ["get", SCORE_PROPERTY] };
@@ -503,9 +562,8 @@ function _addPropertyTripleLayers(opts) {
     minzoom: PROP_CIRCLE_MAX_ZOOM,
     maxzoom: PROP_EXTRUSION_MIN_ZOOM,
     paint: {
-      "fill-color":         colorExpr,
-      "fill-opacity":       PROP_FILL_OPACITY,
-      "fill-outline-color": _c().fillOutline,
+      "fill-color":   colorExpr,
+      "fill-opacity": PROP_FILL_OPACITY,
     },
   });
 
@@ -1014,7 +1072,7 @@ function showRecommendationsOnMap(geojson) {
   const { expr: colorExpr } = _buildColorExpr(geojson, defMode);
 
   _applyRecommendationLayers(geojson, colorExpr, FIT_PADDING_RECOMMENDATIONS);
-  _initModeButtons();
+  _initModeDropdown();
 }
 
 //--------------------------------------------------------------------
@@ -1161,7 +1219,7 @@ function _reapplyCurrentState() {
     const mode = _getChoroplethModes().find(m => m.id === _activeChoroplethModeId);
     const { expr: colorExpr } = _buildColorExpr(_currentRecommendationsGeojson, mode);
     _applyRecommendationLayers(_currentRecommendationsGeojson, colorExpr, FIT_PADDING_RECOMMENDATIONS);
-    _initModeButtons();
+    _initModeDropdown();
   }
 }
 

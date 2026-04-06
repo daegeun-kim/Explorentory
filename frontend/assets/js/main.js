@@ -223,21 +223,26 @@ async function _callExplain(propertyProps, containerEl) {
   };
 
   const propInfo = {
-    rent:          propertyProps.rent_knn,
-    livingroomnum: propertyProps.livingroomnum,
-    bedroomnum:    propertyProps.bedroomnum,
-    bathroomnum:   propertyProps.bathroomnum,
-    sqft:          propertyProps.sqft,
-    borocode:      propertyProps.borocode,
-    built_year:    propertyProps.built_year,
-    height_roof:   propertyProps.heightroof,
-    small_n:       propertyProps.small_n,
-    large_n:       propertyProps.large_n,
-    elevator:      propertyProps.elevator,
-    bld_story:     propertyProps.bld_story,
-    zoning:        propertyProps.zoning,
-    bldg_class:    propertyProps.bldg_class,
-    bld_type:      propertyProps.bld_type,
+    rent:               propertyProps.rent_knn,
+    livingroomnum:      propertyProps.livingroomnum,
+    bedroomnum:         propertyProps.bedroomnum,
+    bathroomnum:        propertyProps.bathroomnum,
+    sqft:               propertyProps.sqft,
+    borocode:           propertyProps.borocode,
+    built_year:         propertyProps.built_year,
+    height_roof:        propertyProps.heightroof,
+    small_n:            propertyProps.small_n,
+    large_n:            propertyProps.large_n,
+    elevator:           propertyProps.elevator,
+    bld_story:          propertyProps.bld_story,
+    zoning:             propertyProps.zoning,
+    bldg_class:         propertyProps.bldg_class,
+    bld_type:           propertyProps.bld_type,
+    dist_greenspace_ft: propertyProps.dist_greenspace_ft,
+    dist_subway_ft:     propertyProps.dist_subway_ft,
+    noise_level:        propertyProps.noise_level,
+    nearest_major_park: propertyProps.nearest_major_park,
+    dist_major_park_ft: propertyProps.dist_major_park_ft,
   };
 
   let text;
@@ -291,11 +296,9 @@ function _showTop10Listing(geojson) {
     const beds   = p.bedroomnum    != null ? `${p.bedroomnum} bd`   : null;
     const baths  = p.bathroomnum   != null ? `${p.bathroomnum} ba`  : null;
     const lvroom = p.livingroomnum != null && Number(p.livingroomnum) > 0 ? `${p.livingroomnum} lr` : null;
-    const built  = p.built_year    != null ? `Built ${Math.round(p.built_year)}`          : null;
-    const stories= p.bld_story     != null ? `${Math.round(p.bld_story)} fl.`             : null;
     const hood   = p.small_n       || "—";
 
-    const tags = [sqft, beds, baths, lvroom, built, stories].filter(Boolean);
+    const tags = [sqft, beds, baths, lvroom].filter(Boolean);
 
     const card = document.createElement("div");
     card.className = "top10-card";

@@ -189,17 +189,22 @@ def get_filtered_properties(
             geom_dict = dict(mapping(geom))
 
             item = {
-                "rent_knn":      _safe_float(row.get("rent_knn")),
-                "sqft":          _safe_float(row.get("sqft")),
-                "bedroomnum":    _safe_int(row.get("bedroomnum")),
-                "bathroomnum":   _safe_int(row.get("bathroomnum")),
-                "small_n":       str(row.get("small_n") or ""),
-                "geom":          geom_dict,
-                "livingroomnum": _safe_int(row.get("livingroomnum")),
-                "borocode":      _safe_int(row.get("borocode")),
-                "built_year":    _safe_int(row.get("built_year")),
-                "bld_story":     _safe_int(row.get("bld_story")),
-                "elevator":      bool(row.get("elevator") or False),
+                "rent_knn":           _safe_float(row.get("rent_knn")),
+                "sqft":               _safe_float(row.get("sqft")),
+                "bedroomnum":         _safe_int(row.get("bedroomnum")),
+                "bathroomnum":        _safe_int(row.get("bathroomnum")),
+                "small_n":            str(row.get("small_n") or ""),
+                "geom":               geom_dict,
+                "livingroomnum":      _safe_int(row.get("livingroomnum")),
+                "borocode":           _safe_int(row.get("borocode")),
+                "built_year":         _safe_int(row.get("built_year")),
+                "bld_story":          _safe_int(row.get("bld_story")),
+                "elevator":           bool(row.get("elevator") or False),
+                "dist_greenspace_ft": _safe_float(row.get("dist_greenspace_ft")),
+                "dist_subway_ft":     _safe_float(row.get("dist_subway_ft")),
+                "noise_level":        str(row.get("noise_level") or ""),
+                "nearest_major_park": str(row.get("nearest_major_park") or ""),
+                "dist_major_park_ft": _safe_float(row.get("dist_major_park_ft")),
             }
             sample_list.append(item)
 

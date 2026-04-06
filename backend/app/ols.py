@@ -8,13 +8,17 @@ from sklearn.preprocessing import StandardScaler
 
 # Expected column order of the raw arrays passed in from recommend.py.
 # These indices are used by _engineer_features() to locate each column.
-COL_RENT_KNN   = 0
-COL_SQFT       = 1
-COL_BEDROOMNUM = 2
-COL_BATHROOMNUM = 3
-COL_BOROCODE   = 4
-COL_BUILT_YEAR = 5
-COL_BLD_STORY  = 6
+COL_RENT_KNN        = 0
+COL_SQFT            = 1
+COL_BEDROOMNUM      = 2
+COL_BATHROOMNUM     = 3
+COL_BOROCODE        = 4
+COL_BUILT_YEAR      = 5
+COL_BLD_STORY       = 6
+COL_ELEVATOR        = 7
+COL_DIST_GREENSPACE = 8
+COL_DIST_SUBWAY     = 9
+COL_NOISE_LEVEL     = 10  # ordinal-encoded: very low=0, low=1, medium=2, high=3, very high=4
 
 # Value assigned when a property's borocode does NOT match the user's neighborhood
 BOROCODE_NO_MATCH = 2
@@ -30,7 +34,8 @@ def _engineer_features(X_raw: np.ndarray, user_prefs: dict,
     Transform raw feature columns into engineered features.
 
     Raw columns (COL_* indices above):
-        rent_knn, sqft, bedroomnum, bathroomnum, borocode, built_year, bld_story
+        rent_knn, sqft, bedroomnum, bathroomnum, borocode, built_year, bld_story,
+        elevator, dist_greenspace_ft, dist_subway_ft, noise_level_ord
 
     Engineered output columns (in order):
         rent_knn         — as-is
@@ -40,6 +45,10 @@ def _engineer_features(X_raw: np.ndarray, user_prefs: dict,
         borocode_match   — BOROCODE_MATCH if same borough, else BOROCODE_NO_MATCH
         built_year_diff  — |built_year  - median_built_year_all|
         bld_story_diff   — |bld_story   - median_bld_story_all|
+        elevator         — 0 or 1
+        dist_greenspace_ft — as-is
+        dist_subway_ft   — as-is
+        noise_level_ord  — ordinal 0–4 (very low → very high)
     """
     user_bedrooms  = float(user_prefs.get("bedrooms")  or 0)
     user_bathrooms = float(user_prefs.get("bathrooms") or 0)
@@ -59,11 +68,16 @@ def _engineer_features(X_raw: np.ndarray, user_prefs: dict,
     else:
         boro_match = np.full(len(X_raw), BOROCODE_NO_MATCH, dtype=float)
 
-    yr_diff    = np.abs(X_raw[:, COL_BUILT_YEAR] - built_year_ref)
-    story_diff = np.abs(X_raw[:, COL_BLD_STORY]  - bld_story_ref)
+    yr_diff         = np.abs(X_raw[:, COL_BUILT_YEAR]      - built_year_ref)
+    story_diff      = np.abs(X_raw[:, COL_BLD_STORY]       - bld_story_ref)
+    elevator        = X_raw[:, COL_ELEVATOR]
+    dist_greenspace = X_raw[:, COL_DIST_GREENSPACE]
+    dist_subway     = X_raw[:, COL_DIST_SUBWAY]
+    noise_level     = X_raw[:, COL_NOISE_LEVEL]
 
     return np.column_stack([
         rent_knn, sqft, bed_diff, bath_diff, boro_match, yr_diff, story_diff,
+        elevator, dist_greenspace, dist_subway, noise_level,
     ])
 
 
@@ -79,11 +93,11 @@ def train_and_predict(
 
     Parameters
     ----------
-    X_train_raw : (n_samples, 7)  raw feature matrix for rated properties
-    y_train     : (n_samples,)    user ratings (0–10)
-    X_all_raw   : (n_total,  7)   raw feature matrix for all filtered properties
-    user_prefs  : dict with keys  bedrooms (int), bathrooms (int),
-                            neighborhood_borocode (int | None)
+    X_train_raw : (n_samples, 11)  raw feature matrix for rated properties
+    y_train     : (n_samples,)     user ratings (0–10)
+    X_all_raw   : (n_total,  11)   raw feature matrix for all filtered properties
+    user_prefs  : dict with keys   bedrooms (int), bathrooms (int),
+                             neighborhood_borocode (int | None)
 
     Returns
     -------
