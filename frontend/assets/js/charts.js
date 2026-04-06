@@ -5,43 +5,62 @@
 // Configuration
 //--------------------------------------------------------------------
 
-// Histogram
-const CHART_NUM_BINS           = 300;   // number of bins for score (span / 300 per bar)
-const HIST_BIN_WIDTH_RENT      = 10;    // $50 per bar
-const HIST_BIN_WIDTH_SQFT      = 50;    // 50 sqft per bar
-const HIST_BIN_WIDTH_YEAR      = 5;     // 5 years per bar
-const HIST_BIN_WIDTH_STORIES   = 1;     // 1 story per bar
-const CHART_BAR_COLOR_FALLBACK = "rgb(99, 173, 242)";
-const CHART_BAR_OPACITY        = 1;
-const CHART_AXIS_COLOR         = "#555";
-const CHART_AXIS_LINE_WIDTH    = 1;
-const CHART_LINE_COLOR         = "#ff5f5f";
-const CHART_LINE_WIDTH         = 2;
-const CHART_LINE_DASH          = [5, 4];
-const CHART_TEXT_COLOR         = "#f0f0f0";
-const CHART_FONT_SMALL         = "13px Roboto, sans-serif";
-const CHART_FONT_TITLE         = "14px Roboto, sans-serif";
-const CHART_LABEL_OFFSET_Y     = 6;
-const CHART_MARGIN             = { top: 8, right: 12, bottom: 36, left: 44 };
+// Histogram — mode-independent
+const CHART_NUM_BINS        = 300;   // number of bins for score (span / 300 per bar)
+const HIST_BIN_WIDTH_RENT   = 10;    // $10 per bar
+const HIST_BIN_WIDTH_SQFT   = 50;    // 50 sqft per bar
+const HIST_BIN_WIDTH_YEAR   = 5;     // 5 years per bar
+const HIST_BIN_WIDTH_STORIES = 1;   // 1 story per bar
+const CHART_BAR_OPACITY      = 1;
+const CHART_AXIS_LINE_WIDTH  = 1;
+const CHART_LINE_WIDTH       = 2;
+const CHART_LINE_DASH        = [5, 4];
+const CHART_FONT_SMALL       = "13px Roboto, sans-serif";
+const CHART_FONT_TITLE       = "14px Roboto, sans-serif";
+const CHART_LABEL_OFFSET_Y   = 6;
+const CHART_MARGIN           = { top: 8, right: 12, bottom: 36, left: 44 };
 
-// Radar triangle
+// Histogram — dark / bright color pairs
+const CHART_BAR_COLOR_FALLBACK        = "rgb(99, 173, 242)";   // dark
+const CHART_BAR_COLOR_FALLBACK_BRIGHT = "rgb(9, 77, 150)";   // bright
+
+const CHART_AXIS_COLOR        = "#6b6b6b";    // dark
+const CHART_AXIS_COLOR_BRIGHT = "#393939";   // bright
+
+const CHART_LINE_COLOR        = "#ff5f5f";  // dark
+const CHART_LINE_COLOR_BRIGHT = "#950007";  // bright
+
+const CHART_TEXT_COLOR        = "#f0f0f0";  // dark
+const CHART_TEXT_COLOR_BRIGHT = "#111111";  // bright
+
+// Radar triangle — mode-independent
 const RADAR_MARGIN_TOP         = 36;
 const RADAR_MARGIN_BOTTOM      = 36;
-const RADAR_OUTER_COLOR        = "rgba(80, 80, 90, 0.6)";
 const RADAR_OUTER_STROKE_WIDTH = 1.5;
-const RADAR_GUIDE_COLOR        = "rgba(70, 70, 80, 0.7)";
 const RADAR_GUIDE_LINE_WIDTH   = 0.7;
 const RADAR_GUIDE_DASH         = [3, 4];
-const RADAR_INNER_STROKE_COLOR = "rgba(255, 255, 255, 0.5)";
-const RADAR_INNER_STROKE_WIDTH = 1.5;
 const RADAR_INNER_ALPHA        = 0.5;
 const RADAR_DOT_RADIUS         = 4;
 const RADAR_LABEL_PAD          = 20;
 const RADAR_FONT               = "14px Roboto, sans-serif";
-const RADAR_AXIS_COLORS        = [
-  "#00c2a2",
-  "#0065ca",
-  "#aeda37",
+
+// Radar triangle — dark / bright color pairs
+const RADAR_OUTER_COLOR        = "rgba(80,  80,  90,  0.6)";   // dark
+const RADAR_OUTER_COLOR_BRIGHT = "rgba(50,  55,  70,  0.7)";   // bright
+
+const RADAR_GUIDE_COLOR        = "rgba(70,  70,  80,  0.7)";   // dark
+const RADAR_GUIDE_COLOR_BRIGHT = "rgba(40,  45,  60,  0.75)";  // bright
+
+// Radar axis vertex colors — dark / bright (brighter neons → darker saturated)
+const RADAR_AXIS_COLORS = [
+  "#00c2a2",   // dark  — teal
+  "#0065ca",   // dark  — blue
+  "#aeda37",   // dark  — yellow-green
+];
+const RADAR_AXIS_COLORS_BRIGHT = [
+  "#006b58",   // bright — dark teal
+  "#002d6d",   // bright — dark blue
+  "#445700",   // bright — dark olive-green
 ];
 const RADAR_AXES = [
   { key: "sqft",     label: "Sqft",     direction: "higher" },
@@ -157,17 +176,18 @@ function _getHistogramBinWidth(col, span) {
 
 /**
  * Returns chart colors for the current dark/bright mode.
- * Each value is a (dark, bright) pair; the right one is selected
- * based on whether body.bright is active.
+ * Dark and bright values are defined as paired constants above.
  */
 function _chartColors() {
   const bright = document.body.classList.contains("bright");
   return {
-    axis:        bright ? "#aaa"                     : CHART_AXIS_COLOR,
-    text:        bright ? "#222"                     : CHART_TEXT_COLOR,
-    barFallback: bright ? "rgb(26, 107, 192)"        : CHART_BAR_COLOR_FALLBACK,
-    radarOuter:  bright ? "rgba(160, 165, 175, 0.6)" : RADAR_OUTER_COLOR,
-    radarGuide:  bright ? "rgba(150, 155, 165, 0.7)" : RADAR_GUIDE_COLOR,
+    axis:           bright ? CHART_AXIS_COLOR_BRIGHT        : CHART_AXIS_COLOR,
+    text:           bright ? CHART_TEXT_COLOR_BRIGHT        : CHART_TEXT_COLOR,
+    line:           bright ? CHART_LINE_COLOR_BRIGHT        : CHART_LINE_COLOR,
+    barFallback:    bright ? CHART_BAR_COLOR_FALLBACK_BRIGHT : CHART_BAR_COLOR_FALLBACK,
+    radarOuter:     bright ? RADAR_OUTER_COLOR_BRIGHT       : RADAR_OUTER_COLOR,
+    radarGuide:     bright ? RADAR_GUIDE_COLOR_BRIGHT       : RADAR_GUIDE_COLOR,
+    radarAxisColors: bright ? RADAR_AXIS_COLORS_BRIGHT      : RADAR_AXIS_COLORS,
   };
 }
 
@@ -448,7 +468,7 @@ function _drawHistogram() {
     if (Number.isFinite(propVal)) {
       const xPos = m.left + ((propVal - minVal) / span) * plotW;
       ctx.save();
-      ctx.strokeStyle = CHART_LINE_COLOR;
+      ctx.strokeStyle = cc.line;
       ctx.lineWidth   = CHART_LINE_WIDTH;
       ctx.setLineDash(CHART_LINE_DASH);
       ctx.beginPath();
@@ -457,7 +477,7 @@ function _drawHistogram() {
       ctx.stroke();
       ctx.restore();
 
-      ctx.fillStyle    = CHART_LINE_COLOR;
+      ctx.fillStyle    = cc.line;
       ctx.font         = CHART_FONT_SMALL;
       ctx.textAlign    = "center";
       ctx.textBaseline = "bottom";
@@ -545,7 +565,7 @@ function _drawRadarTriangle() {
   ANGLES.forEach((a, i) => {
     const lx = cx + (R + RADAR_LABEL_PAD) * Math.cos(a);
     const ly = cy + (R + RADAR_LABEL_PAD) * Math.sin(a);
-    ctx.fillStyle    = RADAR_AXIS_COLORS[i];
+    ctx.fillStyle    = rc.radarAxisColors[i];
     ctx.textAlign    = i === 0 ? "center" : i === 1 ? "left" : "right";
     ctx.textBaseline = i === 0 ? "bottom" : "middle";
     ctx.fillText(RADAR_AXES[i].label, lx, ly);
@@ -591,7 +611,7 @@ function _drawRadarTriangle() {
   for (let i = 0; i < 3; i++) {
     const v    = innerVerts[i];
     const dist = Math.max(8, Math.hypot(v.x - icx, v.y - icy) * 1.6);
-    const [r, g, b] = _hexToRgb(RADAR_AXIS_COLORS[i]);
+    const [r, g, b] = _hexToRgb(rc.radarAxisColors[i]);
     const grad = ctx.createRadialGradient(v.x, v.y, 0, v.x, v.y, dist);
     grad.addColorStop(0,   `rgba(${r},${g},${b},${RADAR_INNER_ALPHA})`);
     grad.addColorStop(1,   `rgba(${r},${g},${b},0)`);
@@ -603,7 +623,7 @@ function _drawRadarTriangle() {
 
   // Colored dots at each inner vertex
   for (let i = 0; i < 3; i++) {
-    const [r, g, b] = _hexToRgb(RADAR_AXIS_COLORS[i]);
+    const [r, g, b] = _hexToRgb(rc.radarAxisColors[i]);
     ctx.beginPath();
     ctx.arc(innerVerts[i].x, innerVerts[i].y, RADAR_DOT_RADIUS, 0, Math.PI * 2);
     ctx.fillStyle = `rgb(${r},${g},${b})`;

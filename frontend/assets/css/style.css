@@ -1,27 +1,42 @@
 /* ============================================================
-  CSS custom properties — edit these to restyle the whole app
+   CSS custom properties — dark (default) and bright overrides
+   grouped by category so each pair stays together.
    ============================================================ */
+
+/* --- Accent / interactive --- */
+:root       { --accent: rgb(99, 173, 242);  --accent-hover: rgb(130, 190, 255); }
+body.bright { --accent: rgb(26, 107, 192);  --accent-hover: rgb(50, 130, 220);  }
+
+/* --- Backgrounds --- */
 :root {
-  /* Accent / interactive */
-  --accent:       rgb(99, 173, 242);
-  --accent-hover: rgb(130, 190, 255);
-
-  /* Backgrounds */
-  --bg-body:     black;
-  --bg-dark:     rgb(16, 16, 19);
-  --bg-modal:    rgb(20, 20, 24);
-  --bg-input:    rgb(35, 35, 40);
-  --bg-card:     rgb(28, 28, 33);
-  --bg-message:  rgb(40, 40, 45);
-  --bg-muted:    rgb(55, 55, 62);
-  --bg-selected: rgb(28, 50, 75);
+  --bg-body:        black;
+  --bg-dark:        rgb(16, 16, 19);
+  --bg-modal:       rgb(20, 20, 24);
+  --bg-input:       rgb(35, 35, 40);
+  --bg-card:        rgb(28, 28, 33);
+  --bg-message:     rgb(40, 40, 45);
+  --bg-muted:       rgb(55, 55, 62);
+  --bg-selected:    rgb(28, 50, 75);
   --bg-user-bubble: rgb(79, 122, 161);
+}
+body.bright {
+  --bg-body:        #e8edf2;
+  --bg-dark:        #f5f7fa;
+  --bg-modal:       #ffffff;
+  --bg-input:       #e0e4ea;
+  --bg-card:        #ffffff;
+  --bg-message:     #dde2e8;
+  --bg-muted:       #c0c7d0;
+  --bg-selected:    rgb(210, 228, 248);
+  --bg-user-bubble: rgb(90, 150, 210);
+}
 
-  /* Borders */
-  --border:      rgb(75, 75, 75);
-  --border-card: rgb(55, 55, 60);
+/* --- Borders --- */
+:root       { --border: rgb(75, 75, 75);    --border-card: rgb(55, 55, 60);   }
+body.bright { --border: rgb(200, 208, 218); --border-card: rgb(210, 218, 228); }
 
-  /* Text */
+/* --- Text --- */
+:root {
   --text-primary:   rgb(220, 220, 220);
   --text-label:     rgb(160, 160, 160);
   --text-secondary: rgb(145, 145, 145);
@@ -29,16 +44,27 @@
   --text-dimmed:    rgb(100, 100, 100);
   --text-soft:      rgb(200, 200, 200);
   --text-white:     #ffffff;
+}
+body.bright {
+  --text-primary:   rgb(20, 20, 20);
+  --text-label:     rgb(80, 80, 80);
+  --text-secondary: rgb(100, 100, 100);
+  --text-muted:     rgb(130, 130, 130);
+  --text-dimmed:    rgb(150, 150, 150);
+  --text-soft:      rgb(40, 40, 40);
+  --text-white:     #000000;
+}
 
-  /* Border radii */
+/* --- Border radii (mode-independent) --- */
+:root {
   --radius-btn:   24px;
   --radius-modal: 16px;
   --radius-card:  12px;
   --radius-input: 8px;
-
-  /* Misc */
-  --reset-btn-color: #818a91;
 }
+
+/* --- Misc (mode-independent) --- */
+:root { --reset-btn-color: #818a91; }
 
 /* ============================================================ */
 
@@ -378,7 +404,7 @@ body {
   border: 1px solid var(--border);
   background-color: var(--bg-dark);
   padding: 16px;
-  color: rgb(146, 146, 146);
+  color: rgb(89, 89, 89);
   white-space: pre-wrap;
   display: flex;
   flex-direction: column;
@@ -573,8 +599,14 @@ body {
   margin-top: 4px;
 }
 
-#pref-submit:hover {
+#pref-submit:hover:not(:disabled) {
   background: var(--accent-hover);
+}
+
+#pref-submit:disabled {
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  cursor: not-allowed;
 }
 
 /* ------------- Priority ranking cards ------------- */
@@ -594,7 +626,7 @@ body {
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--bg-input);
-  cursor: grab;
+  cursor: pointer;
   user-select: none;
   transition: border-color 0.15s, background 0.15s, opacity 0.15s;
 }
@@ -608,16 +640,6 @@ body {
   background: var(--bg-selected);
 }
 
-.pref-priority-card.dragging {
-  opacity: 0.4;
-  cursor: grabbing;
-}
-
-.pref-priority-card.drag-over {
-  border-color: var(--accent);
-  background: var(--bg-selected);
-  box-shadow: 0 0 0 2px var(--accent);
-}
 
 .pref-priority-rank {
   width: 26px;
@@ -1098,30 +1120,7 @@ body {
   }
 }
 
-/* ------------- Bright mode (body.bright) — explicit color overrides ------------- */
-body.bright {
-  --accent:          rgb(26, 107, 192);
-  --accent-hover:    rgb(50, 130, 220);
-  --bg-body:         #e8edf2;
-  --bg-dark:         #f5f7fa;
-  --bg-modal:        #ffffff;
-  --bg-input:        #e0e4ea;
-  --bg-card:         #ffffff;
-  --bg-message:      #dde2e8;
-  --bg-muted:        #c0c7d0;
-  --bg-selected:     rgb(210, 228, 248);
-  --bg-user-bubble:  rgb(90, 150, 210);
-  --border:          rgb(200, 208, 218);
-  --border-card:     rgb(210, 218, 228);
-  --text-primary:    rgb(20, 20, 20);
-  --text-label:      rgb(80, 80, 80);
-  --text-secondary:  rgb(100, 100, 100);
-  --text-muted:      rgb(130, 130, 130);
-  --text-dimmed:     rgb(150, 150, 150);
-  --text-soft:       rgb(40, 40, 40);
-  --text-white:      #000000;
-}
-
+/* ------------- Bright mode — component-level overrides ------------- */
 /* Scrollbars */
 body.bright #output-message { scrollbar-color: #999 #e0e4ea; }
 body.bright #rating-list    { scrollbar-color: #999 #e0e4ea; }
@@ -1179,4 +1178,75 @@ body.bright #histogram-tooltip {
   background: rgba(255, 255, 255, 0.97);
   color: #111;
   border-color: rgba(0, 0, 0, 0.18);
+}
+
+/* ------------- Stage progress indicator ------------- */
+#stage-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+}
+
+.stage-step {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-dimmed);
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+
+.stage-step.active {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.stage-step.done {
+  color: var(--text-muted);
+}
+
+.stage-num {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.stage-step.active .stage-num {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #000;
+}
+
+.stage-step.done .stage-num {
+  background: var(--text-muted);
+  border-color: var(--text-muted);
+  color: #000;
+}
+
+.stage-label {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.stage-sep {
+  color: var(--text-dimmed);
+  font-size: 12px;
+  flex-shrink: 0;
+  padding: 0 2px;
 }

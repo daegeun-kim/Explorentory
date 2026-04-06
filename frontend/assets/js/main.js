@@ -35,6 +35,29 @@ let currentPreferences = null;
 let mapLoadingOverlay  = null;
 
 //--------------------------------------------------------------------
+// Stage indicator — 4-step progress bar shown in the sidebar
+//--------------------------------------------------------------------
+const _STAGE_LABELS = ["Preferences", "Neighborhood", "Rate Properties", "Results"];
+
+function _setStage(num) {
+  let bar = document.getElementById("stage-bar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "stage-bar";
+    const msg       = document.getElementById("message");
+    const outputMsg = document.getElementById("output-message");
+    if (msg && outputMsg) msg.insertBefore(bar, outputMsg);
+  }
+  bar.innerHTML = _STAGE_LABELS.map((label, i) => {
+    const n   = i + 1;
+    const cls = n < num ? "stage-step done" : n === num ? "stage-step active" : "stage-step";
+    const num_display = n < num ? "✓" : String(n);
+    return `<span class="${cls}"><span class="stage-num">${num_display}</span><span class="stage-label">${label}</span></span>`
+         + (i < _STAGE_LABELS.length - 1 ? `<span class="stage-sep">›</span>` : "");
+  }).join("");
+}
+
+//--------------------------------------------------------------------
 // Map loading overlay
 //--------------------------------------------------------------------
 function showMapLoading() {
@@ -87,6 +110,7 @@ function clearPlaceholders() {
 window.onPreferencesSubmit = async function (prefs) {
   currentPreferences = prefs;
   clearPlaceholders();
+  _setStage(2);
   showMapLoading();
   setStatusMessage("Loading neighborhoods…");
 
@@ -119,6 +143,7 @@ window.onPreferencesSubmit = async function (prefs) {
 // Step 2 – Neighborhood confirmed → fetch sample properties
 //--------------------------------------------------------------------
 window.onNeighborhoodSubmit = async function (neighborhood) {
+  _setStage(3);
   // Merge neighborhood centroid coordinates into preferences (not the name)
   currentPreferences = {
     ...currentPreferences,
@@ -255,6 +280,7 @@ window.onRatingsSubmit = async function (ratings) {
       return;
     }
 
+    _setStage(4);
     if (typeof window.showRecommendationsOnMap === "function") {
       window.showRecommendationsOnMap(data.geojson);
     }
@@ -385,6 +411,9 @@ if (resetBtn) {
           <div id="main-placeholder">Set your<br>preferences<br><br>to find<br>your perfect<br>rental</div>
         </div>`;
     }
+
+    const stageBar = document.getElementById("stage-bar");
+    if (stageBar) stageBar.remove();
 
     if (typeof window.showPreferencesModal === "function") {
       window.showPreferencesModal();

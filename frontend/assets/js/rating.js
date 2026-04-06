@@ -112,14 +112,20 @@ function _buildPropertyCard(prop, idx) {
       <span class="rating-card-max">/ ${RATING_MAX}</span>
     </div>`;
 
-  // Clicking the card body (not the input) makes it active
-  card.addEventListener("click", (e) => {
-    if (e.target.tagName === "INPUT") return;
+  // Clicking anywhere on the card (including the score input) activates it
+  card.addEventListener("click", () => {
     _setActiveCard(idx, true);
   });
 
-  // Score input keeps _ratings in sync
-  card.querySelector(".rating-card-input").addEventListener("input", (e) => {
+  const input = card.querySelector(".rating-card-input");
+
+  // Focusing the input (click or keyboard tab) also activates the card
+  input.addEventListener("focus", () => {
+    _setActiveCard(idx, true);
+  });
+
+  // Keep _ratings in sync when the user types a score
+  input.addEventListener("input", (e) => {
     const v = Number(e.target.value);
     _ratings[idx] = Math.min(RATING_MAX, Math.max(RATING_MIN, isNaN(v) ? RATING_DEFAULT : v));
   });
@@ -140,6 +146,11 @@ function _setActiveCard(idx, scrollIntoView) {
   if (scrollIntoView) {
     const activeCard = document.querySelectorAll(".rating-property-card")[idx];
     if (activeCard) activeCard.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  // Highlight the active property on the map (brighter color)
+  if (typeof window.highlightSurveyPropertyOnMap === "function") {
+    window.highlightSurveyPropertyOnMap(idx);
   }
 
   // Dim all pins, brighten the active one
@@ -173,4 +184,5 @@ function _onSubmit() {
   }
 }
 
-window.showRatingPanel = showRatingPanel;
+window.showRatingPanel    = showRatingPanel;
+window.setActiveSurveyCard = function (idx) { _setActiveCard(idx, true); };

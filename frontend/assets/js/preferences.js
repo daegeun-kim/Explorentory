@@ -15,8 +15,8 @@ const ROOM_MAX          = 10;
 const BEDROOMS_DEFAULT  = 1;
 const BATHROOMS_DEFAULT = 1;
 
-// Default priority order (shown at startup)
-const DEFAULT_PRIORITY = ["rent", "location", "sqft"];
+// The three priority keys, in display order
+const PRIORITY_KEYS = ["rent", "location", "sqft"];
 
 //--------------------------------------------------------------------
 
@@ -51,25 +51,25 @@ const DEFAULT_PRIORITY = ["rent", "location", "sqft"];
     </div>
 
     <div class="pref-field">
-      <label class="pref-label">Priority Order &mdash; drag to reorder</label>
+      <label class="pref-label">What matters most? &mdash; click in order of preference</label>
       <div id="pref-priority-row">
-        <div class="pref-priority-card" data-key="rent"     draggable="true">
+        <div class="pref-priority-card" data-key="rent">
           <div class="pref-priority-rank"></div>
           <div class="pref-priority-name">Rent</div>
         </div>
-        <div class="pref-priority-card" data-key="location" draggable="true">
+        <div class="pref-priority-card" data-key="location">
           <div class="pref-priority-rank"></div>
           <div class="pref-priority-name">Location</div>
         </div>
-        <div class="pref-priority-card" data-key="sqft"     draggable="true">
+        <div class="pref-priority-card" data-key="sqft">
           <div class="pref-priority-rank"></div>
           <div class="pref-priority-name">Sq. Footage</div>
         </div>
       </div>
-      <div id="pref-priority-hint">1st = most important &nbsp;·&nbsp; drag cards to reorder</div>
+      <div id="pref-priority-hint">Click 1st → 2nd → 3rd &nbsp;·&nbsp; click again to unrank</div>
     </div>
 
-    <button id="pref-submit">Find Properties</button>
+    <button id="pref-submit" disabled>Find Properties</button>
   `;
 
   overlay.appendChild(modal);
@@ -83,72 +83,55 @@ const DEFAULT_PRIORITY = ["rent", "location", "sqft"];
     rentValue.textContent = Number(rentSlider.value).toLocaleString();
   });
 
-  // ---- Priority drag-and-drop ----
-  let priorityOrder = [...DEFAULT_PRIORITY];
-  let _draggedKey   = null;
+  // ---- Priority click-in-order ----
+  // _selection is an ordered array of keys: first click = rank 1 (highest priority).
+  let _selection = [];
 
-  const cards      = modal.querySelectorAll(".pref-priority-card");
-  const submitBtn  = document.getElementById("pref-submit");
   const priorityRow = document.getElementById("pref-priority-row");
+  const submitBtn   = document.getElementById("pref-submit");
 
-  function refreshCards() {
-    // Re-order DOM cards to match priorityOrder, update rank badges
-    priorityOrder.forEach((key, rank) => {
-      const card   = priorityRow.querySelector(`[data-key="${key}"]`);
+  function _refreshPriorityCards() {
+    priorityRow.querySelectorAll(".pref-priority-card").forEach(card => {
+      const key  = card.dataset.key;
+      const rank = _selection.indexOf(key);  // 0-based, -1 = not ranked
       const rankEl = card.querySelector(".pref-priority-rank");
-      rankEl.textContent = rank + 1;
-      card.classList.add("selected");
-      // Move to correct visual position
-      priorityRow.appendChild(card);
+
+      if (rank === -1) {
+        rankEl.textContent = "";
+        card.classList.remove("selected");
+      } else {
+        rankEl.textContent = rank + 1;
+        card.classList.add("selected");
+      }
     });
+
+    // Enable submit only when all three are ranked
+    submitBtn.disabled = _selection.length < PRIORITY_KEYS.length;
   }
 
-  cards.forEach((card) => {
-    card.addEventListener("dragstart", (e) => {
-      _draggedKey = card.dataset.key;
-      card.classList.add("dragging");
-      e.dataTransfer.effectAllowed = "move";
-    });
+  priorityRow.querySelectorAll(".pref-priority-card").forEach(card => {
+    card.addEventListener("click", () => {
+      const key = card.dataset.key;
+      const existingRank = _selection.indexOf(key);
 
-    card.addEventListener("dragend", () => {
-      card.classList.remove("dragging");
-      cards.forEach(c => c.classList.remove("drag-over"));
-    });
+      if (existingRank !== -1) {
+        // Clicking an already-ranked card unranks it and everything after it
+        _selection = _selection.slice(0, existingRank);
+      } else if (_selection.length < PRIORITY_KEYS.length) {
+        // Add to the end of the current ranking
+        _selection.push(key);
+      }
 
-    card.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      if (card.dataset.key !== _draggedKey) card.classList.add("drag-over");
-    });
-
-    card.addEventListener("dragleave", () => {
-      card.classList.remove("drag-over");
-    });
-
-    card.addEventListener("drop", (e) => {
-      e.preventDefault();
-      card.classList.remove("drag-over");
-      const targetKey = card.dataset.key;
-      if (!_draggedKey || _draggedKey === targetKey) return;
-
-      // Move dragged key to the position of target key
-      const dragIdx = priorityOrder.indexOf(_draggedKey);
-      const dropIdx = priorityOrder.indexOf(targetKey);
-      if (dragIdx === -1 || dropIdx === -1) return;
-
-      priorityOrder.splice(dragIdx, 1);
-      // Recalculate drop index after removal
-      const newDropIdx = priorityOrder.indexOf(targetKey);
-      priorityOrder.splice(newDropIdx, 0, _draggedKey);
-
-      refreshCards();
+      _refreshPriorityCards();
     });
   });
 
-  refreshCards();
+  _refreshPriorityCards();
 
-  // ---- Submit (always enabled — all 3 are always ranked) ----
+  // ---- Submit ----
   submitBtn.addEventListener("click", () => {
+    if (_selection.length < PRIORITY_KEYS.length) return;
+
     const rent      = Number(rentSlider.value);
     const bedrooms  = Math.max(ROOM_MIN, Number(document.getElementById("pref-bedrooms").value));
     const bathrooms = Math.max(ROOM_MIN, Number(document.getElementById("pref-bathrooms").value));
@@ -156,14 +139,14 @@ const DEFAULT_PRIORITY = ["rent", "location", "sqft"];
     overlay.style.display = "none";
 
     if (typeof window.onPreferencesSubmit === "function") {
-      window.onPreferencesSubmit({ rent, bedrooms, bathrooms, priority_order: priorityOrder });
+      window.onPreferencesSubmit({ rent, bedrooms, bathrooms, priority_order: _selection });
     }
   });
 
   // ---- Public API ----
   window.showPreferencesModal = function () {
-    priorityOrder = [...DEFAULT_PRIORITY];
-    refreshCards();
+    _selection = [];
+    _refreshPriorityCards();
     overlay.style.display = "flex";
   };
 })();

@@ -972,15 +972,15 @@
       "type": "fill-extrusion",
       "source": "openmaptiles",
       "source-layer": "building",
-      "minzoom": 15,
+      "minzoom": 14,
       "paint": {
-        "fill-extrusion-color": "rgba(28, 28, 28, 1)",
+        "fill-extrusion-color": "rgba(100, 100, 100, 1)",
         "fill-extrusion-opacity": 0.4,
         "fill-extrusion-height": [
           "step",
           ["zoom"],
           0,
-          12,
+          14,
           [
             "coalesce",
             ["get", "render_height"],

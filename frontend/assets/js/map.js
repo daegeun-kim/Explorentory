@@ -16,7 +16,9 @@ const SCORE_PROPERTY = "final_score";
 const CHOROPLETH_EPSILON = 1e-9;
 
 // stops: 5 → (min,p25,med,p75,max) ramp;  stops: 3 → (min,med,max) ramp
-const CHOROPLETH_MODES = [
+
+// Dark mode — neon/bright ramps that read on a dark basemap
+const CHOROPLETH_MODES_DARK = [
   {
     id: "score",   label: "Score",      col: "final_score", stops: 5,
     colors: ["#ff5571", "#ff9886", "#fffef2", "#7eff43", "#18f197"],
@@ -38,7 +40,42 @@ const CHOROPLETH_MODES = [
     colors: ["#630070", "#9300a7", "#f713ff", "#ff75ff", "#ffffff"],
   },
 ];
+
+// Bright mode — dark, saturated ramps that read on a light basemap
+// Avoids near-white endpoints; all stops visible on a white/light-grey background
+const CHOROPLETH_MODES_BRIGHT = [
+  {
+    id: "score",   label: "Score",      col: "final_score", stops: 5,
+    colors: ["#9e0020", "#c44000", "#646464", "#3da700", "#005c36"],
+  },
+  {
+    id: "rent",    label: "Rent",       col: "rent_knn",    stops: 5,
+    colors: ["#9fd4ff", "#499eff", "#0050c8", "#002c93", "#000850"],
+  },
+  {
+    id: "sqft",    label: "Sqft",       col: "sqft",        stops: 5,
+    colors: ["#a0ffff", "#3dfff2", "#00d3d7", "#008686", "#005a5a"],
+  },
+  {
+    id: "built",   label: "Built Year", col: "built_year",  stops: 5,
+    colors: ["#ffc3ad", "#ff915e", "#ef5d0f", "#923f00", "#4d2100"],
+  },
+  {
+    id: "stories", label: "Stories",    col: "bld_story",   stops: 5,
+    colors: ["#f6aeff", "#ea72ff", "#c50dde", "#8c028c", "#3e003e"],
+  },
+];
+
+// Kept for backward compatibility — always points to the correct set at call time
+const CHOROPLETH_MODES = CHOROPLETH_MODES_DARK;
 const DEFAULT_CHOROPLETH_MODE_ID = "score";
+
+// Returns the correct palette set for the current basemap style
+function _getChoroplethModes() {
+  return (typeof _currentStyleUrl !== "undefined" && _currentStyleUrl === STYLE_BRIGHT)
+    ? CHOROPLETH_MODES_BRIGHT
+    : CHOROPLETH_MODES_DARK;
+}
 
 // fitBounds padding (px) for each view
 const FIT_PADDING_SINGLE          = 120;  // one property during rating
@@ -54,8 +91,12 @@ const SINGLE_PROP_FIT_SPEED = 4;
 // Property layer paint values (non-color)
 const PROP_FILL_OPACITY        = 1;
 const PROP_CIRCLE_RADIUS       = 2;
-const PROP_CIRCLE_STROKE_WIDTH = 1.5;
+const PROP_CIRCLE_STROKE_WIDTH = 0.5;
 const PROP_CIRCLE_OPACITY      = 0.5;
+
+// Survey-step property colors (fixed regardless of dark/bright mode)
+const SURVEY_COLOR_DEFAULT  = "#1a6bc0";  // unselected
+const SURVEY_COLOR_SELECTED = "#63adf2";  // active / highlighted
 
 // Neighborhood layer paint values (non-color)
 const NEIGHBORHOOD_FILL_OPACITY           = 0.06;
@@ -74,12 +115,12 @@ const _DARK_COLORS = {
   pinCircle:    "#ff3333",
 };
 const _BRIGHT_COLORS = {
-  neighborhood: "#1a6bc0",
-  singleProp:   "#1a6bc0",
-  fillOutline:  "#1a1a2e",
-  circleStroke: "#1a1a2e",
-  pinLine:      "#222233",
-  pinCircle:    "#cc2222",
+  neighborhood: "#0f55a0",
+  singleProp:   "#0f55a0",
+  fillOutline:  "#818181",
+  circleStroke: "#818181",
+  pinLine:      "#818181",
+  pinCircle:    "#a70b0b",
 };
 // Evaluated at call time so it always reflects the current style
 function _c() {
@@ -88,9 +129,12 @@ function _c() {
     : _DARK_COLORS;
 }
 
-// Zoom level at which recommendations switch from circles (zoomed out)
-// to polygon fills (zoomed in)
-const RECOMMENDATIONS_POLYGON_MIN_ZOOM = 11;
+// Zoom thresholds for property geometry display:
+//   zoom < PROP_CIRCLE_MAX_ZOOM                           → circle marker
+//   PROP_CIRCLE_MAX_ZOOM ≤ zoom < PROP_EXTRUSION_MIN_ZOOM → flat polygon fill
+//   zoom ≥ PROP_EXTRUSION_MIN_ZOOM                        → 3-D fill-extrusion
+const PROP_CIRCLE_MAX_ZOOM    = 12;
+const PROP_EXTRUSION_MIN_ZOOM = 14;
 
 // Fields shown in the hover tooltip for recommendation properties
 // (in display order; keys must match GeoJSON property names from nyc_units)
@@ -137,6 +181,7 @@ let _allSurveyPinMarkers = [];    // all 10 survey pins shown simultaneously
 // Survey-step state for style-switch re-apply
 let _surveyProperties       = null;
 let _currentSurveyActiveIdx = 0;
+let _surveyHighlightIdx     = null;   // which property is currently highlighted on map
 
 // Hovered neighborhood feature id (for feature-state hover effect)
 let _hoveredNeighborhoodId = null;
@@ -154,18 +199,20 @@ let _singlePropertyObj    = null;
 //--------------------------------------------------------------------
 // Source / layer ids — survey step (all 10 properties shown at once)
 //--------------------------------------------------------------------
-const surveyPropertiesSrcId    = "survey-properties";
-const surveyPropertiesPtSrcId  = "survey-properties-points";
-const surveyPropertiesFillId   = "survey-properties-fill";
-const surveyPropertiesCircleId = "survey-properties-circle";
+const surveyPropertiesSrcId = "survey-properties";
+const surveyPropertiesPtSrcId = "survey-properties-points";
+const surveyCircleId  = "survey-properties-circle";
+const surveyFillId    = "survey-properties-fill";
+const surveyExtId     = "survey-properties-extrusion";
 
 //--------------------------------------------------------------------
-// Source / layer ids — properties
+// Source / layer ids — recommendations / final view
 //--------------------------------------------------------------------
 const propertiesSourceId        = "properties";
-const propertiesFillId          = "properties-fill";
-const propertiesCircleId        = "properties-circle";
 const recommendationsPointSrcId = "recommendations-points";
+const propCircleId = "properties-circle";
+const propFillId   = "properties-fill";
+const propExtId    = "properties-extrusion";
 
 // Selected-property highlight (red fill, from listing card click)
 const selectedPropSrcId  = "selected-property";
@@ -200,9 +247,10 @@ function clearNeighborhoodLayer() {
 function clearAllSources() {
   clearNeighborhoodLayer();
   clearSurveyPropertiesLayer();
-  if (map.getLayer(propertiesFillId))    map.removeLayer(propertiesFillId);
-  if (map.getLayer(propertiesCircleId))  map.removeLayer(propertiesCircleId);
-  if (map.getSource(propertiesSourceId)) map.removeSource(propertiesSourceId);
+  [propExtId, propFillId, propCircleId].forEach(id => {
+    if (map.getLayer(id)) map.removeLayer(id);
+  });
+  if (map.getSource(propertiesSourceId))        map.removeSource(propertiesSourceId);
   if (map.getSource(recommendationsPointSrcId)) map.removeSource(recommendationsPointSrcId);
   if (_hoverPopup) { _hoverPopup.remove(); _hoverPopup = null; }
   clearPropertyHighlight();
@@ -217,13 +265,7 @@ function clearAllSources() {
   _currentSurveyActiveIdx        = 0;
   _hoveredNeighborhoodId         = null;
 
-  // Reset map pitch to flat view
   if (map.getPitch() > 0) map.easeTo({ pitch: 0, duration: 400 });
-
-  // Restore basemap 3D-building layer opacity (was hidden during recommendations view)
-  if (map.getLayer("building3D")) {
-    map.setPaintProperty("building3D", "fill-extrusion-opacity", 0.4);
-  }
 
   const modeButtons = document.getElementById("choropleth-mode-buttons");
   if (modeButtons) modeButtons.style.display = "none";
@@ -235,6 +277,22 @@ function clearAllSources() {
 function _isPolygon(geojsonObj) {
   const type = geojsonObj.features?.[0]?.geometry?.type || "";
   return type === "Polygon" || type === "MultiPolygon";
+}
+
+//--------------------------------------------------------------------
+// Helper: compute centroid [lon, lat] from a GeoJSON geometry object.
+// Used as fallback when centroid_lon/lat are absent from the raw data.
+//--------------------------------------------------------------------
+function _centroidFromGeom(geom) {
+  if (!geom) return null;
+  if (geom.type === "Point") return [geom.coordinates[0], geom.coordinates[1]];
+  let ring = null;
+  if      (geom.type === "Polygon")      ring = geom.coordinates[0];
+  else if (geom.type === "MultiPolygon") ring = geom.coordinates[0][0];
+  if (!ring || !ring.length) return null;
+  const lon = ring.reduce((s, c) => s + c[0], 0) / ring.length;
+  const lat = ring.reduce((s, c) => s + c[1], 0) / ring.length;
+  return [lon, lat];
 }
 
 //--------------------------------------------------------------------
@@ -376,19 +434,22 @@ function _initModeButtons() {
 }
 
 function updateChoroplethMode(modeId) {
-  const mode = CHOROPLETH_MODES.find(m => m.id === modeId);
+  const mode = _getChoroplethModes().find(m => m.id === modeId);
   if (!mode || !_currentRecommendationsGeojson) return;
 
   _activeChoroplethModeId = modeId;
 
   const { expr: colorExpr, stops } = _buildColorExpr(_currentRecommendationsGeojson, mode);
 
-  if (map.getLayer(propertiesFillId)) {
-    map.setPaintProperty(propertiesFillId, "fill-extrusion-color", colorExpr);
+  if (map.getLayer(propExtId)) {
+    map.setPaintProperty(propExtId, "fill-extrusion-color", colorExpr);
   }
-  if (map.getLayer(propertiesCircleId)) {
-    map.setPaintProperty(propertiesCircleId, "circle-color",        colorExpr);
-    map.setPaintProperty(propertiesCircleId, "circle-stroke-color", colorExpr);
+  if (map.getLayer(propFillId)) {
+    map.setPaintProperty(propFillId, "fill-color", colorExpr);
+  }
+  if (map.getLayer(propCircleId)) {
+    map.setPaintProperty(propCircleId, "circle-color",        colorExpr);
+    map.setPaintProperty(propCircleId, "circle-stroke-color", colorExpr);
   }
 
   // Update button active states
@@ -403,76 +464,61 @@ function updateChoroplethMode(modeId) {
 }
 
 //--------------------------------------------------------------------
-// Internal: clear old property layers/source, add fresh source + layer
+// _addPropertyTripleLayers
+// Adds three layers for a property dataset covering all zoom levels:
+//   circle  — zoom < PROP_CIRCLE_MAX_ZOOM       (low-detail point marker)
+//   fill    — PROP_CIRCLE_MAX_ZOOM .. PROP_EXTRUSION_MIN_ZOOM (flat polygon)
+//   extrusion — zoom ≥ PROP_EXTRUSION_MIN_ZOOM  (3-D fill-extrusion)
+// Only fill + extrusion are added when the geometry is polygonal.
+// opts.useSortKey: add circle-sort-key (score) for recommendations.
 //--------------------------------------------------------------------
-function _applyLayer(geojsonObj, colorExpr, fitPadding, fitOptions = {}) {
-  const applyFn = () => {
-    // Clear property layers and sources (not neighborhood layers)
-    if (map.getLayer(propertiesFillId))   map.removeLayer(propertiesFillId);
-    if (map.getLayer(propertiesCircleId)) map.removeLayer(propertiesCircleId);
-    if (map.getSource(propertiesSourceId))        map.removeSource(propertiesSourceId);
-    if (map.getSource(recommendationsPointSrcId)) map.removeSource(recommendationsPointSrcId);
+function _addPropertyTripleLayers(opts) {
+  const { polySourceId, ptSourceId, circleId, fillId, extId, colorExpr, useSortKey, geojson, beforeExtId } = opts;
+  const isPolygon = _isPolygon(geojson);
 
-    map.addSource(propertiesSourceId, { type: "geojson", data: geojsonObj });
-
-    if (_isPolygon(geojsonObj)) {
-      // Dual-layer: circles when zoomed out, fill polygon when zoomed in
-      map.addSource(recommendationsPointSrcId, {
-        type: "geojson",
-        data: _polygonsToPoints(geojsonObj),
-      });
-
-      // Fill layer — visible only at zoom >= RECOMMENDATIONS_POLYGON_MIN_ZOOM
-      map.addLayer({
-        id:      propertiesFillId,
-        type:    "fill",
-        source:  propertiesSourceId,
-        minzoom: RECOMMENDATIONS_POLYGON_MIN_ZOOM,
-        paint: {
-          "fill-color":         colorExpr,
-          "fill-opacity":       PROP_FILL_OPACITY,
-          "fill-outline-color": _c().fillOutline,
-        },
-      });
-
-      // Circle layer — visible only at zoom < RECOMMENDATIONS_POLYGON_MIN_ZOOM
-      map.addLayer({
-        id:      propertiesCircleId,
-        type:    "circle",
-        source:  recommendationsPointSrcId,
-        maxzoom: RECOMMENDATIONS_POLYGON_MIN_ZOOM,
-        paint: {
-          "circle-radius":       PROP_CIRCLE_RADIUS,
-          "circle-color":        colorExpr,
-          "circle-stroke-color": _c().circleStroke,
-          "circle-stroke-width": PROP_CIRCLE_STROKE_WIDTH,
-          "circle-opacity":      PROP_CIRCLE_OPACITY,
-        },
-      });
-    } else {
-      map.addLayer({
-        id:     propertiesCircleId,
-        type:   "circle",
-        source: propertiesSourceId,
-        paint: {
-          "circle-radius":       PROP_CIRCLE_RADIUS,
-          "circle-color":        colorExpr,
-          "circle-stroke-color": _c().circleStroke,
-          "circle-stroke-width": PROP_CIRCLE_STROKE_WIDTH,
-          "circle-opacity":      PROP_CIRCLE_OPACITY,
-        },
-      });
-    }
-
-    const bounds = getGeojsonBounds(geojsonObj);
-    if (bounds) map.fitBounds(bounds, { padding: fitPadding, ...fitOptions });
+  // Circle — always added (point source, low zoom)
+  const circleLayer = {
+    id: circleId, type: "circle", source: ptSourceId,
+    maxzoom: PROP_CIRCLE_MAX_ZOOM,
+    paint: {
+      "circle-radius":       PROP_CIRCLE_RADIUS,
+      "circle-color":        colorExpr,
+      "circle-stroke-color": _c().circleStroke,
+      "circle-stroke-width": PROP_CIRCLE_STROKE_WIDTH,
+      "circle-opacity":      PROP_CIRCLE_OPACITY,
+    },
   };
+  if (useSortKey) circleLayer.layout = { "circle-sort-key": ["get", SCORE_PROPERTY] };
+  map.addLayer(circleLayer);
 
-  if (!map.isStyleLoaded()) {
-    map.once("load", applyFn);
-  } else {
-    applyFn();
-  }
+  if (!isPolygon) return;  // point-only data: nothing more to add
+
+  // Flat fill — mid zoom (shows polygon footprint without extrusion)
+  map.addLayer({
+    id: fillId, type: "fill", source: polySourceId,
+    minzoom: PROP_CIRCLE_MAX_ZOOM,
+    maxzoom: PROP_EXTRUSION_MIN_ZOOM,
+    paint: {
+      "fill-color":         colorExpr,
+      "fill-opacity":       PROP_FILL_OPACITY,
+      "fill-outline-color": _c().fillOutline,
+    },
+  });
+
+  // Fill-extrusion — high zoom (3-D; one floor ≈ 3.048 m / 10 ft)
+  // If beforeExtId names an existing layer, insert before it so our extrusion
+  // renders first and wins the depth test (LESS) against that layer.
+  const safeBeforeExt = beforeExtId && map.getLayer(beforeExtId) ? beforeExtId : undefined;
+  map.addLayer({
+    id: extId, type: "fill-extrusion", source: polySourceId,
+    minzoom: PROP_EXTRUSION_MIN_ZOOM,
+    paint: {
+      "fill-extrusion-color":   colorExpr,
+      "fill-extrusion-opacity": PROP_FILL_OPACITY,
+      "fill-extrusion-base":   ["*", ["max", ["-", ["to-number", ["get", "bld_story"]], 1], 0], 3.048],
+      "fill-extrusion-height": ["*", ["max", ["to-number", ["get", "bld_story"]], 1], 3.048],
+    },
+  }, safeBeforeExt);
 }
 
 //--------------------------------------------------------------------
@@ -584,8 +630,9 @@ function showNeighborhoodsOnMap(geojson) {
 }
 
 //--------------------------------------------------------------------
-// showAllSurveyPropertiesOnMap  – display all 10 survey properties at once.
-// Below zoom 11 → circles; at/above zoom 11 → polygon fills.
+// showAllSurveyPropertiesOnMap  – display all 10 survey properties.
+// zoom < 11 → circles; 11–14 → flat fill; ≥ 14 → fill-extrusion.
+// Each feature carries _idx so map clicks can identify the card.
 //--------------------------------------------------------------------
 function showAllSurveyPropertiesOnMap(properties) {
   _surveyProperties = properties;
@@ -594,59 +641,70 @@ function showAllSurveyPropertiesOnMap(properties) {
   const geojson = {
     type:     "FeatureCollection",
     features: properties
-      .filter(p => p.geom)
-      .map(p => ({
-        type:     "Feature",
-        geometry: p.geom,
-        properties: {
-          centroid_lon: p.centroid_lon,
-          centroid_lat: p.centroid_lat,
-          rent_knn:     p.rent_knn,
-          small_n:      p.small_n,
-          bld_story:    p.bld_story,
-        },
-      })),
+      .map((p, idx) => {
+        const geom = p.geom || null;
+        if (!geom) return null;
+
+        // centroid_lon/lat not returned by /properties endpoint — derive from geometry
+        let cLon = p.centroid_lon != null ? Number(p.centroid_lon) : NaN;
+        let cLat = p.centroid_lat != null ? Number(p.centroid_lat) : NaN;
+        if (!Number.isFinite(cLon) || !Number.isFinite(cLat)) {
+          const c = _centroidFromGeom(geom);
+          if (c) { cLon = c[0]; cLat = c[1]; }
+        }
+
+        return {
+          type:     "Feature",
+          geometry: geom,
+          properties: {
+            _idx:         idx,
+            centroid_lon: cLon,
+            centroid_lat: cLat,
+            rent_knn:     p.rent_knn,
+            small_n:      p.small_n,
+            bld_story:    p.bld_story,
+          },
+        };
+      })
+      .filter(Boolean),
   };
 
   const applyFn = () => {
     clearSurveyPropertiesLayer();
-    const color = _c().singleProp;
-
     map.addSource(surveyPropertiesSrcId,   { type: "geojson", data: geojson });
     map.addSource(surveyPropertiesPtSrcId, { type: "geojson", data: _polygonsToPoints(geojson) });
 
-    // Fill-extrusion — visible at zoom >= 11 (identical to recommendations final view)
-    map.addLayer({
-      id:      surveyPropertiesFillId,
-      type:    "fill-extrusion",
-      source:  surveyPropertiesSrcId,
-      minzoom: RECOMMENDATIONS_POLYGON_MIN_ZOOM,
-      paint: {
-        "fill-extrusion-color":   color,
-        "fill-extrusion-opacity": PROP_FILL_OPACITY,
-        "fill-extrusion-base":    ["*",
-          ["max", ["-", ["to-number", ["get", "bld_story"]], 1], 0],
-          3.048],
-        "fill-extrusion-height":  ["*",
-          ["max", ["to-number", ["get", "bld_story"]], 1],
-          3.048],
-      },
+    _addPropertyTripleLayers({
+      polySourceId: surveyPropertiesSrcId,
+      ptSourceId:   surveyPropertiesPtSrcId,
+      circleId:     surveyCircleId,
+      fillId:       surveyFillId,
+      extId:        surveyExtId,
+      colorExpr:    SURVEY_COLOR_DEFAULT,
+      useSortKey:   false,
+      geojson,
+      beforeExtId:  "building3D",
     });
 
-    // Circle — visible at zoom < 11
-    map.addLayer({
-      id:      surveyPropertiesCircleId,
-      type:    "circle",
-      source:  surveyPropertiesPtSrcId,
-      maxzoom: RECOMMENDATIONS_POLYGON_MIN_ZOOM,
-      paint: {
-        "circle-radius":       PROP_CIRCLE_RADIUS,
-        "circle-color":        color,
-        "circle-stroke-color": _c().circleStroke,
-        "circle-stroke-width": PROP_CIRCLE_STROKE_WIDTH,
-        "circle-opacity":      PROP_CIRCLE_OPACITY,
-      },
+    // Fit map to show all survey properties
+    const surveyBounds = getGeojsonBounds(geojson);
+    if (surveyBounds) map.fitBounds(surveyBounds, { padding: FIT_PADDING_RECOMMENDATIONS, maxZoom: 13 });
+
+    // Map click on any survey layer → activate the corresponding card
+    [surveyCircleId, surveyFillId, surveyExtId].forEach(layerId => {
+      map.on("click", layerId, (e) => {
+        if (!e.features.length) return;
+        const idx = Number(e.features[0].properties._idx);
+        if (Number.isFinite(idx) && typeof window.setActiveSurveyCard === "function") {
+          window.setActiveSurveyCard(idx);
+        }
+      });
     });
+
+    // Re-apply any existing highlight after style switch
+    if (_surveyHighlightIdx !== null) {
+      _updateSurveyHighlight(_surveyHighlightIdx);
+    }
   };
 
   if (!map.isStyleLoaded()) {
@@ -657,13 +715,39 @@ function showAllSurveyPropertiesOnMap(properties) {
 }
 
 //--------------------------------------------------------------------
+// _updateSurveyHighlight  – repaint survey layers so _idx === idx is
+// shown in the selected color and all others use the default color.
+//--------------------------------------------------------------------
+function _updateSurveyHighlight(idx) {
+  _surveyHighlightIdx = idx;
+  const colorExpr = ["case", ["==", ["get", "_idx"], idx],
+    SURVEY_COLOR_SELECTED,
+    SURVEY_COLOR_DEFAULT,
+  ];
+  if (map.getLayer(surveyCircleId)) {
+    map.setPaintProperty(surveyCircleId, "circle-color", colorExpr);
+    map.setPaintProperty(surveyCircleId, "circle-stroke-color", colorExpr);
+  }
+  if (map.getLayer(surveyFillId)) {
+    map.setPaintProperty(surveyFillId, "fill-color", colorExpr);
+  }
+  if (map.getLayer(surveyExtId)) {
+    map.setPaintProperty(surveyExtId, "fill-extrusion-color", colorExpr);
+  }
+}
+
+window.highlightSurveyPropertyOnMap = _updateSurveyHighlight;
+
+//--------------------------------------------------------------------
 // clearSurveyPropertiesLayer  – remove the survey property layers/sources
 //--------------------------------------------------------------------
 function clearSurveyPropertiesLayer() {
-  if (map.getLayer(surveyPropertiesFillId))   map.removeLayer(surveyPropertiesFillId);
-  if (map.getLayer(surveyPropertiesCircleId)) map.removeLayer(surveyPropertiesCircleId);
+  [surveyExtId, surveyFillId, surveyCircleId].forEach(id => {
+    if (map.getLayer(id)) map.removeLayer(id);
+  });
   if (map.getSource(surveyPropertiesSrcId))   map.removeSource(surveyPropertiesSrcId);
   if (map.getSource(surveyPropertiesPtSrcId)) map.removeSource(surveyPropertiesPtSrcId);
+  _surveyHighlightIdx = null;
 }
 
 //--------------------------------------------------------------------
@@ -672,8 +756,12 @@ function clearSurveyPropertiesLayer() {
 //--------------------------------------------------------------------
 function showSinglePropertyOnMap(property) {
   _singlePropertyObj = property;
-  const lon = Number(property.centroid_lon);
-  const lat = Number(property.centroid_lat);
+  let lon = Number(property.centroid_lon);
+  let lat = Number(property.centroid_lat);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+    const c = _centroidFromGeom(property.geom || null);
+    if (c) { lon = c[0]; lat = c[1]; }
+  }
   if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
   map.flyTo({
     center:   [lon, lat],
@@ -699,8 +787,12 @@ function showSurveyPinsOnMap(properties, activeIdx) {
   clearSurveyPin();
 
   properties.forEach((prop, idx) => {
-    const lon = Number(prop.centroid_lon);
-    const lat = Number(prop.centroid_lat);
+    let lon = Number(prop.centroid_lon);
+    let lat = Number(prop.centroid_lat);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+      const c = _centroidFromGeom(prop.geom || null);
+      if (c) { lon = c[0]; lat = c[1]; }
+    }
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
       _allSurveyPinMarkers.push(null); // keep index alignment
       return;
@@ -808,84 +900,40 @@ function _polygonsToPoints(geojsonObj) {
 }
 
 //--------------------------------------------------------------------
-// Internal: add dual layers for recommendations
-//   zoom <  RECOMMENDATIONS_POLYGON_MIN_ZOOM → circles (point source)
-//   zoom >= RECOMMENDATIONS_POLYGON_MIN_ZOOM → polygon fills
-// Border color matches the choropleth fill color on both layer types.
+// Internal: clear and rebuild recommendation layers using triple-zoom scheme.
 //--------------------------------------------------------------------
 function _applyRecommendationLayers(geojsonObj, colorExpr, fitPadding) {
   const applyFn = () => {
-    // Remove stale popup before rebuilding layers
     if (_hoverPopup) { _hoverPopup.remove(); _hoverPopup = null; }
 
-    if (map.getLayer(propertiesFillId))   map.removeLayer(propertiesFillId);
-    if (map.getLayer(propertiesCircleId)) map.removeLayer(propertiesCircleId);
+    [propExtId, propFillId, propCircleId].forEach(id => {
+      if (map.getLayer(id)) map.removeLayer(id);
+    });
     if (map.getSource(propertiesSourceId))        map.removeSource(propertiesSourceId);
     if (map.getSource(recommendationsPointSrcId)) map.removeSource(recommendationsPointSrcId);
 
-    // Polygon source (for fill layer at high zoom)
-    map.addSource(propertiesSourceId, { type: "geojson", data: geojsonObj });
+    map.addSource(propertiesSourceId,        { type: "geojson", data: geojsonObj });
+    map.addSource(recommendationsPointSrcId, { type: "geojson", data: _polygonsToPoints(geojsonObj) });
 
-    // Point source derived from centroid properties (for circle layer at low zoom)
-    map.addSource(recommendationsPointSrcId, {
-      type: "geojson",
-      data: _polygonsToPoints(geojsonObj),
+    _addPropertyTripleLayers({
+      polySourceId: propertiesSourceId,
+      ptSourceId:   recommendationsPointSrcId,
+      circleId:     propCircleId,
+      fillId:       propFillId,
+      extId:        propExtId,
+      colorExpr,
+      useSortKey:   true,
+      geojson:      geojsonObj,
+      beforeExtId:  "building3D",
     });
 
-    // Fill-extrusion layer — visible only when zoomed IN (>= zoom 11)
-    // Each property extruded 10 ft per floor (bld_story = floor number):
-    //   base   = (floor - 1) × 3.048 m   (3.048 m ≈ 10 ft)
-    //   height = floor × 3.048 m
-    map.addLayer({
-      id:      propertiesFillId,
-      type:    "fill-extrusion",
-      source:  propertiesSourceId,
-      minzoom: RECOMMENDATIONS_POLYGON_MIN_ZOOM,
-      paint: {
-        "fill-extrusion-color":   colorExpr,
-        "fill-extrusion-opacity": PROP_FILL_OPACITY,
-        "fill-extrusion-base":    ["*",
-          ["max", ["-", ["to-number", ["get", "bld_story"]], 1], 0],
-          3.048],
-        "fill-extrusion-height":  ["*",
-          ["max", ["to-number", ["get", "bld_story"]], 1],
-          3.048],
-      },
+    // Attach hover tooltips and click highlight to fill + extrusion + circle layers
+    [propFillId, propExtId, propCircleId].forEach(id => {
+      _attachHoverTooltip(id);
+      _attachClickHighlight(id);
     });
 
-    // Circle layer — visible only when zoomed OUT
-    // circle-sort-key: higher final_score drawn on top (painted last)
-    map.addLayer({
-      id:      propertiesCircleId,
-      type:    "circle",
-      source:  recommendationsPointSrcId,
-      maxzoom: RECOMMENDATIONS_POLYGON_MIN_ZOOM,
-      layout: {
-        "circle-sort-key": ["get", SCORE_PROPERTY],
-      },
-      paint: {
-        "circle-radius":       PROP_CIRCLE_RADIUS,
-        "circle-color":        colorExpr,
-        "circle-stroke-color": colorExpr,  // border matches fill
-        "circle-stroke-width": PROP_CIRCLE_STROKE_WIDTH,
-        "circle-opacity":      PROP_CIRCLE_OPACITY,
-      },
-    });
-
-    // Attach hover tooltips and click highlight to both layers
-    _attachHoverTooltip(propertiesFillId);
-    _attachHoverTooltip(propertiesCircleId);
-    _attachClickHighlight(propertiesFillId);
-    _attachClickHighlight(propertiesCircleId);
-
-    // Register the single empty-space click handler (once)
     _attachMapEmptyClickHandler();
-
-    // Hide the basemap 3D-building layer so it doesn't occlude our fill-extrusion
-    // properties (basemap buildings render with depth testing that can cover our layer).
-    if (map.getLayer("building3D")) {
-      map.setPaintProperty("building3D", "fill-extrusion-opacity", 0);
-    }
 
     const bounds = getGeojsonBounds(geojsonObj);
     if (bounds) map.fitBounds(bounds, { padding: fitPadding });
@@ -902,11 +950,15 @@ function _applyRecommendationLayers(geojsonObj, colorExpr, fitPadding) {
 // showRecommendationsOnMap  – top results, default choropleth by score
 //--------------------------------------------------------------------
 function showRecommendationsOnMap(geojson) {
+  // Clean up survey stage artefacts before showing final results
+  clearSurveyPropertiesLayer();
+  clearSurveyPin();
+
   _currentRecommendationsGeojson = geojson;
   _activeChoroplethModeId        = DEFAULT_CHOROPLETH_MODE_ID;
   _activeView                    = "recommendations";
 
-  const defMode = CHOROPLETH_MODES.find(m => m.id === DEFAULT_CHOROPLETH_MODE_ID);
+  const defMode = _getChoroplethModes().find(m => m.id === DEFAULT_CHOROPLETH_MODE_ID);
   const { expr: colorExpr } = _buildColorExpr(geojson, defMode);
 
   _applyRecommendationLayers(geojson, colorExpr, FIT_PADDING_RECOMMENDATIONS);
@@ -985,7 +1037,7 @@ function _attachMapEmptyClickHandler() {
   _mapEmptyClickAttached = true;
   map.on("click", (e) => {
     if (!_currentRecommendationsGeojson) return;
-    const activeLayers = [propertiesFillId, propertiesCircleId].filter(id => map.getLayer(id));
+    const activeLayers = [propExtId, propFillId, propCircleId].filter(id => map.getLayer(id));
     const hits = map.queryRenderedFeatures(e.point, { layers: activeLayers });
     if (!hits.length) {
       clearMapBinFilter();
@@ -998,8 +1050,12 @@ function _attachMapEmptyClickHandler() {
 // flyToProperty  – fly the map to a property's centroid (for listing clicks)
 //--------------------------------------------------------------------
 function flyToProperty(props) {
-  const lon = Number(props.centroid_lon);
-  const lat = Number(props.centroid_lat);
+  let lon = Number(props.centroid_lon);
+  let lat = Number(props.centroid_lat);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+    const c = _centroidFromGeom(props.geom || null);
+    if (c) { lon = c[0]; lat = c[1]; }
+  }
   if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
   map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 15), duration: 600 });
 }
@@ -1050,7 +1106,7 @@ function _reapplyCurrentState() {
     showAllSurveyPropertiesOnMap(_surveyProperties);
     showSurveyPinsOnMap(_surveyProperties, _currentSurveyActiveIdx);
   } else if (_activeView === "recommendations" && _currentRecommendationsGeojson) {
-    const mode = CHOROPLETH_MODES.find(m => m.id === _activeChoroplethModeId);
+    const mode = _getChoroplethModes().find(m => m.id === _activeChoroplethModeId);
     const { expr: colorExpr } = _buildColorExpr(_currentRecommendationsGeojson, mode);
     _applyRecommendationLayers(_currentRecommendationsGeojson, colorExpr, FIT_PADDING_RECOMMENDATIONS);
     _initModeButtons();
@@ -1101,7 +1157,7 @@ window.filterMapByBin         = filterMapByBin;
 window.clearMapBinFilter      = clearMapBinFilter;
 
 window.getColorStopsForMode = function (geojsonObj, modeId) {
-  const mode = CHOROPLETH_MODES.find(m => m.id === modeId);
+  const mode = _getChoroplethModes().find(m => m.id === modeId);
   if (!mode || !geojsonObj) return [];
   return _buildColorExpr(geojsonObj, mode).stops;
 };
