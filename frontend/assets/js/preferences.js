@@ -29,6 +29,7 @@ const PRIORITY_KEYS = ["rent", "location", "sqft"];
   modal.id = "pref-modal";
 
   modal.innerHTML = `
+    <button id="pref-invert" title="Invert colors">&#9680;</button>
     <div id="pref-title">Explorentory</div>
     <div id="pref-subtitle">Find your perfect NYC rental</div>
 
@@ -79,6 +80,13 @@ const PRIORITY_KEYS = ["rent", "location", "sqft"];
 
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
+
+  // ---- Invert button (mirrors the main color-invert button) ----
+  document.getElementById("pref-invert").addEventListener("click", () => {
+    document.body.classList.toggle("bright");
+    if (typeof window.toggleMapStyle === "function") window.toggleMapStyle();
+    if (typeof window.redrawCharts   === "function") window.redrawCharts();
+  });
 
   // ---- Live rent display ----
   const rentSlider = document.getElementById("pref-rent");

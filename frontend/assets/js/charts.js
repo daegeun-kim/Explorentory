@@ -20,7 +20,7 @@ const CHART_LINE_DASH        = [5, 4];
 const CHART_FONT_SMALL       = "13px Roboto, sans-serif";
 const CHART_FONT_TITLE       = "14px Roboto, sans-serif";
 const CHART_LABEL_OFFSET_Y   = 6;
-const CHART_MARGIN           = { top: 8, right: 12, bottom: 36, left: 44 };
+const CHART_MARGIN           = { top: 28, right: 12, bottom: 36, left: 44 };
 
 // Histogram — dark / bright color pairs
 const CHART_BAR_COLOR_FALLBACK        = "rgb(99, 173, 242)";   // dark
@@ -53,34 +53,34 @@ const RADAR_OUTER_COLOR_BRIGHT = "rgba(50,  55,  70,  0.7)";   // bright
 const RADAR_GUIDE_COLOR        = "rgba(70,  70,  80,  0.7)";   // dark
 const RADAR_GUIDE_COLOR_BRIGHT = "rgba(40,  45,  60,  0.75)";  // bright
 
-// Radar axis vertex colors — dark / bright (one entry per axis in pool)
+// Radar axis vertex colors — dark / bright (one entry per axis in pool, order matches RADAR_AXES_POOL)
 const RADAR_AXIS_COLORS = [
-  "#00c2a2",   // dark — teal          (sqft)
   "#0065ca",   // dark — blue          (rent)
   "#aeda37",   // dark — yellow-green  (location)
-  "#e8820c",   // dark — orange        (green space)
+  "#00c2a2",   // dark — teal          (sqft)
   "#c44dff",   // dark — purple        (subway)
+  "#e8820c",   // dark — orange        (green space)
   "#ff4f78",   // dark — rose          (noise)
 ];
 const RADAR_AXIS_COLORS_BRIGHT = [
-  "#006b58",   // bright — dark teal   (sqft)
   "#002d6d",   // bright — dark blue   (rent)
   "#445700",   // bright — dark olive  (location)
-  "#7a3f00",   // bright — dark orange (green space)
+  "#006b58",   // bright — dark teal   (sqft)
   "#5e0099",   // bright — dark purple (subway)
+  "#7a3f00",   // bright — dark orange (green space)
   "#9b002b",   // bright — dark rose   (noise)
 ];
 
 // Full pool of available radar axes — user selects 3–6 of these
 const RADAR_AXES_POOL = [
-  { key: "sqft",               label: "Sqft",         direction: "higher" },
-  { key: "rent_knn",           label: "Rent",         direction: "lower"  },
-  { key: "distance",           label: "Location",     direction: "lower"  },
+  { key: "rent_knn",           label: "Rent",                  direction: "lower"  },
+  { key: "distance",           label: "Location",              direction: "lower"  },
+  { key: "sqft",               label: "Sqft",                  direction: "higher" },
+  { key: "dist_subway_ft",     label: "Subway Distance",       direction: "higher" },
   { key: "dist_greenspace_ft", label: "Green Space Distance",  direction: "higher" },
-  { key: "dist_subway_ft",     label: "Subway Distance", direction: "higher" },
   {
     key:       "noise_level",
-    label:     "Noise Level",
+    label:     "Noise Comfort",
     direction: "lower",
     toNum:     v => ({ "very low": 0, "low": 1, "medium": 2, "high": 3, "very high": 4 }[
                        String(v).toLowerCase().trim()
@@ -221,8 +221,8 @@ function _onHistClick(e) {
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
 
-  // Outside the plot area → clear filter
-  if (mx < d.plotLeft || mx > d.plotLeft + d.plotW || my < d.plotTop || my > d.plotTop + d.plotH) {
+  // Outside plot area X bounds or below plot bottom → clear filter
+  if (mx < d.plotLeft || mx > d.plotLeft + d.plotW || my > d.plotTop + d.plotH) {
     if (typeof window.clearMapBinFilter === "function") window.clearMapBinFilter();
     return;
   }
@@ -230,8 +230,11 @@ function _onHistClick(e) {
   const binIdx = Math.min(d.numBins - 1, Math.max(0, Math.floor((mx - d.plotLeft) / d.barW)));
   const count  = d.counts[binIdx];
 
-  if (!count) {
-    // Empty bin → clear filter
+  // Compute the top pixel of this bar; click above it means empty space → clear filter
+  const barH   = d.maxCount > 0 ? (count / d.maxCount) * d.plotH : 0;
+  const barTop = d.plotTop + d.plotH - barH;
+
+  if (!count || my < barTop) {
     if (typeof window.clearMapBinFilter === "function") window.clearMapBinFilter();
     return;
   }
@@ -384,13 +387,20 @@ function clearCharts() {
   _histogramData    = null;
   _activeRadarAxes  = RADAR_AXES_POOL.slice(0, 3);
   if (_histHoverEl) _histHoverEl.style.display = "none";
-  ["chart2-toggle", "chart2-spec-wrap", "chart2-axis-selector"].forEach(id => {
+
+  // Rescue canvas-wrap from radar-body before removing it
+  const chart2El   = document.getElementById("chart2");
+  const c2Wrap     = document.getElementById("chart2-canvas-wrap");
+  const radarBodyC = document.getElementById("chart2-radar-body");
+  if (radarBodyC && c2Wrap && radarBodyC.contains(c2Wrap) && chart2El) {
+    chart2El.appendChild(c2Wrap);
+  }
+  ["chart2-toggle", "chart2-spec-wrap", "chart2-axis-selector", "chart2-radar-body"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.remove();
   });
 
   const c1Wrap = document.getElementById("chart1-canvas-wrap");
-  const c2Wrap = document.getElementById("chart2-canvas-wrap");
   if (c1Wrap) c1Wrap.innerHTML = "";
   if (c2Wrap) c2Wrap.innerHTML = "";
   const t1 = document.getElementById("chart1-title");
@@ -527,7 +537,7 @@ function _drawHistogram() {
 
   // Cache bin geometry for hover hit-testing
   const barW = plotW / numBins;
-  _histogramData = { canvas, minVal: effMin, bw, numBins, counts, plotLeft: m.left, plotTop, plotW, plotH, barW };
+  _histogramData = { canvas, minVal: effMin, bw, numBins, counts, maxCount, plotLeft: m.left, plotTop, plotW, plotH, barW };
 
   // Draw bars — each bar colored by the midpoint value through the choropleth ramp
   for (let i = 0; i < numBins; i++) {
@@ -652,14 +662,14 @@ function _drawHistogram() {
 //--------------------------------------------------------------------
 // Radar axis selector — pill buttons between chart2-title and canvas
 //--------------------------------------------------------------------
-function _buildAxisSelector() {
+function _buildAxisSelector(container) {
   // Remove existing selector if any
   const existing = document.getElementById("chart2-axis-selector");
   if (existing) existing.remove();
 
-  const titleEl  = document.getElementById("chart2-title");
-  const canvasEl = document.getElementById("chart2-canvas-wrap");
-  if (!titleEl || !canvasEl) return;
+  // Use provided container or fall back to the radar-body div
+  const target = container || document.getElementById("chart2-radar-body");
+  if (!target) return;
 
   const sel = document.createElement("div");
   sel.id = "chart2-axis-selector";
@@ -702,24 +712,20 @@ function _buildAxisSelector() {
     sel.appendChild(btn);
   });
 
-  // Insert after spec-wrap if it exists; otherwise fall back to after the title
-  const specWrap = document.getElementById("chart2-spec-wrap");
-  (specWrap || titleEl).insertAdjacentElement("afterend", sel);
+  target.appendChild(sel);
 }
 
 //--------------------------------------------------------------------
 // chart2 — mode toggle, spec/radar view management
 //--------------------------------------------------------------------
 
-/** Applies visibility of spec-wrap, axis-selector, and canvas-wrap for the current _chart2Mode. */
+/** Applies visibility of spec-wrap vs radar-body (canvas + axis selector) for the current _chart2Mode. */
 function _applyChart2ModeVisibility() {
-  const isSpec = _chart2Mode === "spec";
-  const specEl = document.getElementById("chart2-spec-wrap");
-  const axSel  = document.getElementById("chart2-axis-selector");
-  const canvas = document.getElementById("chart2-canvas-wrap");
-  if (specEl)  specEl.style.display  = isSpec ? "flex" : "none";
-  if (axSel)   axSel.style.display   = isSpec ? "none"  : "";
-  if (canvas)  canvas.style.display  = isSpec ? "none"  : "";
+  const isSpec    = _chart2Mode === "spec";
+  const specEl    = document.getElementById("chart2-spec-wrap");
+  const radarBody = document.getElementById("chart2-radar-body");
+  if (specEl)    specEl.style.display    = isSpec ? "flex" : "none";
+  if (radarBody) radarBody.style.display = isSpec ? "none" : "flex";
 }
 
 /**
@@ -727,14 +733,20 @@ function _applyChart2ModeVisibility() {
  * Called from initCharts; also used to rebuild on reset.
  */
 function _buildChart2UI() {
-  // Remove any existing dynamic chart2 elements
-  ["chart2-toggle", "chart2-spec-wrap", "chart2-axis-selector"].forEach(id => {
+  // Rescue canvas-wrap from radar-body before teardown, then remove dynamic elements
+  const chart2El  = document.getElementById("chart2");
+  const canvasEl  = document.getElementById("chart2-canvas-wrap");
+  const radarBody = document.getElementById("chart2-radar-body");
+  if (radarBody && canvasEl && radarBody.contains(canvasEl) && chart2El) {
+    chart2El.appendChild(canvasEl);
+  }
+  ["chart2-toggle", "chart2-spec-wrap", "chart2-axis-selector", "chart2-radar-body"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.remove();
   });
 
   const titleEl = document.getElementById("chart2-title");
-  if (!titleEl) return;
+  if (!titleEl || !canvasEl) return;
   titleEl.textContent = "Property Profile";
 
   // --- Mode toggle ---
@@ -765,8 +777,12 @@ function _buildChart2UI() {
   specWrap.id = "chart2-spec-wrap";
   toggle.insertAdjacentElement("afterend", specWrap);
 
-  // --- Axis selector (inserts after specWrap via _buildAxisSelector) ---
-  _buildAxisSelector();
+  // --- Radar body: row container with canvas on left + axis selector on right ---
+  const radarBodyEl = document.createElement("div");
+  radarBodyEl.id = "chart2-radar-body";
+  specWrap.insertAdjacentElement("afterend", radarBodyEl);
+  radarBodyEl.appendChild(canvasEl);        // move canvas into radar body
+  _buildAxisSelector(radarBodyEl);          // axis selector appended to the right
 
   _applyChart2ModeVisibility();
   _renderPropertySpec();

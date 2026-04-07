@@ -476,31 +476,42 @@ body.bright .chart2-tab.active { color: #fff; }
   opacity: 0.7;
 }
 
-/* ------------- radar axis selector ------------- */
+/* ------------- radar body (canvas + axis selector side by side) ------------- */
+#chart2-radar-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+/* ------------- radar axis selector (right-side column) ------------- */
 #chart2-axis-selector {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 4px;
-  justify-content: center;
-  padding: 0 4px 6px;
+  padding: 6px 6px 6px 4px;
   flex-shrink: 0;
+  justify-content: center;
+  overflow-y: auto;
 }
 
 .radar-axis-btn {
   font-size: 11px;
   font-family: "Roboto", sans-serif;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
-  border-top: 3px solid var(--border);
+  border-left: 3px solid var(--border);
+  white-space: nowrap;
 }
 
 .radar-axis-btn.active {
-  border-top-color: var(--axis-color);
+  border-left-color: var(--axis-color);
   color: var(--text-primary);
 }
 
@@ -626,6 +637,25 @@ body.bright .chart2-tab.active { color: #fff; }
   gap: 24px;
   color: var(--text-primary);
   font-family: "Roboto", sans-serif;
+  position: relative;
+}
+
+#pref-invert {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 28px;
+  border: 0;
+  border-radius: 14px;
+  font-size: 17px;
+  cursor: pointer;
+  background-color: var(--bg-muted);
+  color: var(--text-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 #pref-title {
@@ -796,7 +826,7 @@ body.bright .chart2-tab.active { color: #fff; }
 }
 
 #pref-priority-hint {
-  font-size: 11px;
+  font-size: 16px;
   color: var(--text-dimmed);
   margin-top: 6px;
 }

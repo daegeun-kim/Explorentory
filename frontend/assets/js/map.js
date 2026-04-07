@@ -864,9 +864,9 @@ function showSurveyPinsOnMap(properties, activeIdx) {
     el.className   = "property-pin";
     el.style.opacity    = (idx === activeIdx) ? "1" : "0.3";
     el.style.transition = "opacity 0.2s";
-    el.innerHTML = `<svg width="20" height="40" viewBox="0 0 20 40" xmlns="http://www.w3.org/2000/svg">
-      <line x1="10" y1="18" x2="10" y2="40" stroke="${_c().pinLine}" stroke-width="2"/>
-      <circle cx="10" cy="10" r="9" fill="${_c().pinCircle}" stroke="${_c().pinLine}" stroke-width="1.5"/>
+    el.innerHTML = `<svg width="20" height="40" viewBox="0 0 20 40" xmlns="http://www.w3.org/2000/svg" style="display:block">
+      <line x1="10" y1="16" x2="10" y2="40" stroke="${_c().pinLine}" stroke-width="2"/>
+      <circle cx="10" cy="10" r="6" fill="${_c().pinCircle}"/>
     </svg>`;
 
     const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
@@ -1095,9 +1095,9 @@ function highlightPropertyOnMap(feature) {
   // Simple pin: red circle on top, white vertical line pointing down to the property
   const el = document.createElement("div");
   el.style.cssText = "pointer-events:none;";
-  el.innerHTML = `<svg width="20" height="40" viewBox="0 0 20 40" xmlns="http://www.w3.org/2000/svg">
-    <line x1="10" y1="18" x2="10" y2="40" stroke="${_c().pinLine}" stroke-width="2"/>
-    <circle cx="10" cy="10" r="9" fill="${_c().pinCircle}" stroke="${_c().pinLine}" stroke-width="1.5"/>
+  el.innerHTML = `<svg width="20" height="40" viewBox="0 0 20 40" xmlns="http://www.w3.org/2000/svg" style="display:block">
+    <line x1="10" y1="16" x2="10" y2="40" stroke="${_c().pinLine}" stroke-width="2"/>
+    <circle cx="10" cy="10" r="6" fill="${_c().pinCircle}"/>
   </svg>`;
 
   _selectedPropMarker = new maplibregl.Marker({ element: el, anchor: "bottom" })
