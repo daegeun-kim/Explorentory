@@ -3,7 +3,7 @@ import json
 
 from openai import OpenAI
 from dotenv import load_dotenv
-from .llm_prompt import DB_SCHEMA_analyze
+from .llm_prompt import DB_SCHEMA_analyze, CHAT_SYSTEM_PROMPT
 
 load_dotenv(dotenv_path="../.env")
 api_key = os.getenv("OPENAI_API_KEY")
@@ -47,3 +47,88 @@ def explain_property(user_prefs: dict, property_info: dict) -> str:
     print(f"[llm] /explain tokens — input: {usage['input']}  output: {usage['output']}  total: {usage['total']}")
 
     return resp.output_text.strip()
+
+
+def explain_result(user_prefs: dict, priority_order: list, ols_coef: dict,
+                neighborhood: str, concern: str) -> str:
+    """Return a 3-5 sentence plain-text explanation of what the ML model learned
+    from the user's survey ratings, framed in terms of preferences."""
+
+    # Sort coefficients by absolute magnitude for the prompt
+    sorted_coef = sorted(ols_coef.items(), key=lambda x: abs(x[1]), reverse=True)
+    coef_lines = "\n".join(f"  {k}: {v:+.4f}" for k, v in sorted_coef)
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a friendly NYC rental advisor. "
+                "Based on OLS regression coefficients from the user's property ratings, "
+                "write 2-4 sentences telling the user what their survey revealed about their preferences. "
+                "Speak directly to the user in plain conversational English — no numbers, no coefficient values, no technical terms. "
+                "Focus only on the top 3-4 most influential features (highest absolute coefficient). "
+                "Translate feature names: rent_knn=rent, sqft=apartment size, bedroomnum_diff=bedroom match, "
+                "bathroomnum_diff=bathroom match, borocode_match=staying in same borough, "
+                "built_year_diff=building age, bld_story_diff=number of floors, elevator=elevator access, "
+                "dist_greenspace_ft=proximity to parks, dist_subway_ft=subway access, noise_level_ord=noise level. "
+                "Positive coefficient = user preferred more/higher; negative = preferred less/lower. "
+                "For _diff features, negative coefficient means the user disliked deviating from their stated preference. "
+                "Plain text only — no bullet points, no numbers, no JSON."
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps({
+                "user_preferences": {
+                    "target_rent":   user_prefs.get("rent"),
+                    "bedrooms":      user_prefs.get("bedrooms"),
+                    "bathrooms":     user_prefs.get("bathrooms"),
+                    "priority_order": priority_order,
+                    "neighborhood":  neighborhood,
+                    "concern":       concern,
+                },
+                "ols_coefficients_by_importance": coef_lines,
+                "interpretation_guide": (
+                    "rent_knn: monthly rent; sqft: size; bedroomnum_diff: bedroom match; "
+                    "bathroomnum_diff: bathroom match; borocode_match: same borough; "
+                    "built_year_diff: building age preference; bld_story_diff: floor count preference; "
+                    "elevator: has elevator; dist_greenspace_ft: proximity to parks; "
+                    "dist_subway_ft: proximity to subway; noise_level_ord: noise (0=very low, 4=very high)"
+                ),
+            }, ensure_ascii=False),
+        },
+    ]
+
+    resp = client.responses.create(model="gpt-5-nano", input=messages)
+    usage = resp.usage
+    print(f"[llm] /explain_result tokens — input: {usage.input_tokens}  output: {usage.output_tokens}")
+    return resp.output_text.strip()
+
+
+def chat_query(user_message: str, history: list) -> dict:
+    """
+    Process a chat message and return a structured JSON response.
+    history: list of {"role": "user"|"assistant", "content": str}
+    Returns parsed dict with "filters", "sort", or "message" key.
+    """
+    messages = [{"role": "system", "content": CHAT_SYSTEM_PROMPT}]
+    for h in history:
+        messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": user_message})
+
+    resp = client.responses.create(model="gpt-5-nano", input=messages)
+    usage = resp.usage
+    print(f"[llm] /chat tokens — input: {usage.input_tokens}  output: {usage.output_tokens}")
+
+    raw = resp.output_text.strip()
+    # Strip markdown code fences if present
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {"message": "I had trouble understanding that. Could you rephrase your request to filter or rank the properties?"}

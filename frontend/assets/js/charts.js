@@ -6,7 +6,7 @@
 //--------------------------------------------------------------------
 
 // Histogram — mode-independent
-const CHART_NUM_BINS        = 300;   // number of bins for score (span / 300 per bar)
+const CHART_NUM_BINS        = 50;    // number of bins for score (span / 50 per bar)
 const HIST_BIN_WIDTH_RENT     = 10;   // $10 per bar
 const HIST_BIN_WIDTH_SQFT     = 50;   // 50 sqft per bar
 const HIST_BIN_WIDTH_YEAR     = 5;    // 5 years per bar
@@ -254,10 +254,10 @@ function _getHistogramBinWidth(col, span) {
   if (col === "bld_story")         return HIST_BIN_WIDTH_STORIES;
   if (col === "elevator")          return HIST_BIN_WIDTH_ORDINAL;
   if (col === "noise_level_ord")   return HIST_BIN_WIDTH_ORDINAL;
-  if (col === "dist_major_park_ft" ||
-      col === "dist_greenspace_ft" ||
+  if (col === "dist_major_park_ft") return span / 50;   // 50 bins
+  if (col === "dist_greenspace_ft" ||
       col === "dist_subway_ft")    return HIST_BIN_WIDTH_DIST;
-  return span / CHART_NUM_BINS;   // score: 300 bins
+  return span / CHART_NUM_BINS;   // score: 50 bins
 }
 
 //--------------------------------------------------------------------

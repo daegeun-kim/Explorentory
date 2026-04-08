@@ -1266,6 +1266,22 @@ window.highlightPropertyOnMap = highlightPropertyOnMap;
 window.filterMapByBin         = filterMapByBin;
 window.clearMapBinFilter      = clearMapBinFilter;
 
+/**
+ * Replace the live recommendation dataset (for chat filter/sort).
+ * geojson: new FeatureCollection to display. If fitBounds=true, re-fits the map.
+ */
+window.updateRecommendationData = function (geojson, fitBounds = true) {
+  _currentRecommendationsGeojson = geojson;
+  const polygonSrc = map.getSource(propertiesSourceId);
+  const pointSrc   = map.getSource(recommendationsPointSrcId);
+  if (polygonSrc) polygonSrc.setData(geojson);
+  if (pointSrc)   pointSrc.setData(_polygonsToPoints(geojson));
+  if (fitBounds) {
+    const bounds = getGeojsonBounds(geojson);
+    if (bounds) map.fitBounds(bounds, { padding: FIT_PADDING_RECOMMENDATIONS });
+  }
+};
+
 window.getColorStopsForMode = function (geojsonObj, modeId) {
   const mode = _getChoroplethModes().find(m => m.id === modeId);
   if (!mode || !geojsonObj) return [];

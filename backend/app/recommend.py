@@ -39,7 +39,7 @@ NOISE_LEVEL_MAP = {
 }
 
 # Top N recommendations to return (unique BIN)
-TOP_N = 3000
+TOP_N = 5000
 
 # Priority weights: index 0 = 1st priority, index 1 = 2nd, index 2 = 3rd
 PRIORITY_WEIGHTS = [3, 2, 1]
@@ -167,7 +167,7 @@ def run_recommendation(gdf, ratings, priority_order=None, user_prefs=None):
 
         # --- OLS: feature engineering + scaling + fit + predict (all in ols.py) ---
         _t_ols = time.perf_counter()
-        predicted_scores = train_and_predict(X_train, y_train, X_all, user_prefs)
+        predicted_scores, ols_coef = train_and_predict(X_train, y_train, X_all, user_prefs)
         gdf["predicted_score"] = predicted_scores
         print(f"[recommend] OLS train+predict: {time.perf_counter()-_t_ols:.3f}s")
         print(f"[recommend] predicted_score stats  min={gdf['predicted_score'].min():.4f}  max={gdf['predicted_score'].max():.4f}")
@@ -226,7 +226,7 @@ def run_recommendation(gdf, ratings, priority_order=None, user_prefs=None):
         print(f"[recommend] GeoJSON serialization: {time.perf_counter()-_t_serial:.3f}s")
         print(f"[recommend] serialized to GeoJSON — {len(geojson.get('features', []))} features")
         print(f"[recommend] run_recommendation total: {time.perf_counter()-_t_start:.3f}s")
-        return {"geojson": geojson, "error": None}
+        return {"geojson": geojson, "ols_coef": ols_coef, "error": None}
 
     except Exception as e:
         print(f"[recommend] exception: {e}")

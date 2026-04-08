@@ -132,6 +132,13 @@ def train_and_predict(
     model.fit(X_train_sc, y_train)
     print(f"[ols] model fit  coef={model.coef_.round(4).tolist()}  intercept={model.intercept_:.4f}")
 
+    ENGINEERED_FEATURE_NAMES = [
+        "rent_knn", "sqft", "bedroomnum_diff", "bathroomnum_diff",
+        "borocode_match", "built_year_diff", "bld_story_diff",
+        "elevator", "dist_greenspace_ft", "dist_subway_ft", "noise_level_ord",
+    ]
+    coef_dict = dict(zip(ENGINEERED_FEATURE_NAMES, model.coef_.round(4).tolist()))
+
     predictions = model.predict(X_all_sc)
     print(f"[ols] predictions — min={float(predictions.min()):.3f}  max={float(predictions.max()):.3f}")
-    return predictions
+    return predictions, coef_dict

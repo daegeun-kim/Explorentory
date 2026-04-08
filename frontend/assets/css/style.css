@@ -537,15 +537,13 @@ body.bright .chart2-tab.active { color: #fff; }
 
 #output-message {
   width: 100%;
-  flex: 1 1 auto;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: #444 #1a1a1a;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
 }
 #output-placeholder {
   line-height: 1;
@@ -1150,12 +1148,173 @@ body.bright .chart2-tab.active { color: #fff; }
 }
 
 /* ------------- Top-10 property listing ------------- */
-#top10-listing {
+/* listing wrap = scrollable top portion inside output-message */
+#top10-listing-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: 100%;
+  gap: 6px;
+  padding: 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: #444 #1a1a1a;
 }
+
+body.bright #top10-listing-wrap { scrollbar-color: #999 #e0e4ea; }
+
+/* Drag handle between listing and chat panel */
+#listing-chat-handle {
+  flex-shrink: 0;
+  height: 6px;
+  cursor: row-resize;
+  background: transparent;
+  border-top: 2px solid var(--border);
+  transition: border-color 0.15s;
+}
+#listing-chat-handle:hover { border-color: var(--accent); }
+
+/* ------------- Chat panel ------------- */
+#chat-panel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  height: 30%;
+  min-height: 140px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  gap: 6px;
+}
+
+#chat-log {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  scrollbar-width: thin;
+  scrollbar-color: #444 #1a1a1a;
+}
+
+body.bright #chat-log { scrollbar-color: #999 #e0e4ea; }
+
+.chat-bubble {
+  font-size: 14px;
+  font-family: "Roboto", sans-serif;
+  line-height: 1.5;
+  padding: 6px 10px;
+  border-radius: 10px;
+  max-width: 90%;
+  word-break: break-word;
+}
+
+.chat-bubble-user {
+  align-self: flex-end;
+  background: var(--bg-user-bubble);
+  color: var(--text-white);
+  border-bottom-right-radius: 2px;
+}
+
+.chat-bubble-bot {
+  align-self: flex-start;
+  background: var(--bg-message);
+  color: var(--text-primary);
+  border-bottom-left-radius: 2px;
+}
+
+.chat-spinner-bubble {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--bg-message);
+}
+
+.chat-spinner-bubble .explain-spinner {
+  margin-top: 0;
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+  border-top-width: 2px;
+}
+
+#chat-explain-row {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+#chat-explain-result-btn {
+  padding: 4px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-family: "Roboto", sans-serif;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+#chat-explain-result-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #000;
+}
+
+#chat-explain-result-btn:disabled { opacity: 0.45; cursor: default; }
+
+#chat-reset-filter-btn {
+  padding: 4px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: "Roboto", sans-serif;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#chat-reset-filter-btn:hover { background: rgba(128,128,128,0.15); }
+
+#chat-input-row {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+#chat-input {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 5px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-white);
+  font-size: 12px;
+  font-family: "Roboto", sans-serif;
+  box-sizing: border-box;
+}
+
+#chat-input::placeholder { color: var(--text-dimmed); }
+
+#chat-send-btn {
+  padding: 5px 14px;
+  border-radius: 14px;
+  border: none;
+  background: var(--accent);
+  color: #000;
+  font-size: 12px;
+  font-family: "Roboto", sans-serif;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+#chat-send-btn:hover:not(:disabled) { background: var(--accent-hover); }
+#chat-send-btn:disabled { opacity: 0.45; cursor: default; }
 
 .top10-header {
   font-size: 14px;
@@ -1169,7 +1328,7 @@ body.bright .chart2-tab.active { color: #fff; }
   background: var(--bg-card);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-card);
-  padding: 7px 10px;
+  padding: 4px 8px;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
@@ -1181,33 +1340,47 @@ body.bright .chart2-tab.active { color: #fff; }
 }
 
 .top10-card-hood {
-  font-size: 24px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-white);
-  line-height: 1;
-  margin-bottom: 1px;
+  line-height: 1.2;
+  margin-bottom: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .top10-card-rent {
-  font-size: 30px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--accent);
-  line-height: 1;
-  margin-bottom: 3px;
+  line-height: 1.1;
+  margin-bottom: 2px;
 }
 
 .top10-card-tags {
   display: flex;
-  gap: 5px;
+  gap: 3px;
   flex-wrap: wrap;
 }
 
 .top10-tag {
-  font-size: 15px;
+  font-size: 10px;
   color: var(--text-label);
   background: var(--bg-message);
-  padding: 3px 10px;
-  border-radius: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* 2-column grid when sidebar is ≥ 800px wide */
+#top10-listing-wrap.wide {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  align-content: start;
+}
+#top10-listing-wrap.wide .top10-header {
+  grid-column: 1 / -1;
 }
 
 /* ------------- Map hover tooltip ------------- */
@@ -1280,8 +1453,9 @@ body.bright .chart2-tab.active { color: #fff; }
 
 /* ------------- Bright mode — component-level overrides ------------- */
 /* Scrollbars */
-body.bright #output-message  { scrollbar-color: #999 #e0e4ea; }
-body.bright #rating-list     { scrollbar-color: #999 #e0e4ea; }
+body.bright #top10-listing-wrap { scrollbar-color: #999 #e0e4ea; }
+body.bright #chat-log           { scrollbar-color: #999 #e0e4ea; }
+body.bright #rating-list        { scrollbar-color: #999 #e0e4ea; }
 body.bright #chart2-spec-wrap { scrollbar-color: #999 #e0e4ea; }
 
 /* Rating section hardcoded white text */

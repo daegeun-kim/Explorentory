@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from .db import get_filtered_properties, get_neighborhoods
 from .recommend import run_recommendation
-from .llm.llm_router import explain_property
+from .llm.llm_router import explain_property, explain_result, chat_query
 
 app = FastAPI()
 
@@ -39,6 +39,19 @@ class RecommendPayload(BaseModel):
 class ExplainPayload(BaseModel):
     user_prefs: Dict[str, Any]
     property_info: Dict[str, Any]
+
+
+class ExplainResultPayload(BaseModel):
+    user_prefs: Dict[str, Any]
+    priority_order: List[str]
+    ols_coef: Dict[str, float]
+    neighborhood: Optional[str] = ""
+    concern: Optional[str] = ""
+
+
+class ChatPayload(BaseModel):
+    message: str
+    history: Optional[List[Dict[str, str]]] = []
 
 
 @app.post("/explain")
@@ -122,4 +135,34 @@ def get_recommendations(payload: RecommendPayload):
 
     count = len(rec["geojson"].get("features", []))
     print(f"[API] /recommend done -> returning {count} recommendations")
-    return {"geojson": rec["geojson"], "error": None}
+    return {"geojson": rec["geojson"], "ols_coef": rec.get("ols_coef", {}), "error": None}
+
+
+@app.post("/explain_result")
+def get_result_explanation(payload: ExplainResultPayload):
+    print(f"\n[API] POST /explain_result  priority={payload.priority_order}")
+    try:
+        text = explain_result(
+            payload.user_prefs,
+            payload.priority_order,
+            payload.ols_coef,
+            payload.neighborhood,
+            payload.concern,
+        )
+        print(f"[API] /explain_result done ({len(text)} chars)")
+        return {"explanation": text, "error": None}
+    except Exception as e:
+        print(f"[API] /explain_result error: {e}")
+        return {"explanation": None, "error": str(e)}
+
+
+@app.post("/chat")
+def chat_with_llm(payload: ChatPayload):
+    print(f"\n[API] POST /chat  message='{payload.message[:80]}'")
+    try:
+        result = chat_query(payload.message, payload.history or [])
+        print(f"[API] /chat done  keys={list(result.keys())}")
+        return {"result": result, "error": None}
+    except Exception as e:
+        print(f"[API] /chat error: {e}")
+        return {"result": None, "error": str(e)}
