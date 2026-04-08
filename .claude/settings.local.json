@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"\\\\/\\\\*\\\\|*\\\\/\" /c/Users/kdgki/Desktop/MSCDP/Projects/Capstone/Explorentory/frontend/assets/js/*.js)"
+    ]
+  }
+}

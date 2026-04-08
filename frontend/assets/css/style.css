@@ -497,7 +497,7 @@ body.bright .chart2-tab.active { color: #fff; }
 }
 
 .radar-axis-btn {
-  font-size: 11px;
+  font-size: 13px;
   font-family: "Roboto", sans-serif;
   padding: 3px 10px;
   border-radius: 10px;
@@ -1180,8 +1180,7 @@ body.bright #top10-listing-wrap { scrollbar-color: #999 #e0e4ea; }
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  height: 30%;
-  min-height: 140px;
+  min-height: 0;
   border-top: 1px solid var(--border);
   padding-top: 8px;
   gap: 6px;
@@ -1201,7 +1200,7 @@ body.bright #top10-listing-wrap { scrollbar-color: #999 #e0e4ea; }
 body.bright #chat-log { scrollbar-color: #999 #e0e4ea; }
 
 .chat-bubble {
-  font-size: 14px;
+  font-size: 15px;
   font-family: "Roboto", sans-serif;
   line-height: 1.5;
   padding: 6px 10px;
@@ -1282,6 +1281,8 @@ body.bright #chat-log { scrollbar-color: #999 #e0e4ea; }
   display: flex;
   gap: 6px;
   flex-shrink: 0;
+  margin-bottom: 18px;
+  margin-left: 2px;
 }
 
 #chat-input {
@@ -1340,7 +1341,7 @@ body.bright #chat-log { scrollbar-color: #999 #e0e4ea; }
 }
 
 .top10-card-hood {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text-white);
   line-height: 1.2;
@@ -1351,7 +1352,7 @@ body.bright #chat-log { scrollbar-color: #999 #e0e4ea; }
 }
 
 .top10-card-rent {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--accent);
   line-height: 1.1;
@@ -1365,7 +1366,7 @@ body.bright #chat-log { scrollbar-color: #999 #e0e4ea; }
 }
 
 .top10-tag {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-label);
   background: var(--bg-message);
   padding: 1px 5px;

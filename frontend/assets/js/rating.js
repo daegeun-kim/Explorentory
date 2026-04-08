@@ -124,10 +124,15 @@ function _buildPropertyCard(prop, idx) {
     _setActiveCard(idx, true);
   });
 
-  // Keep _ratings in sync when the user types a score
+  // Keep _ratings in sync and clamp value to [0, 10] as user types
   input.addEventListener("input", (e) => {
     const v = Number(e.target.value);
-    _ratings[idx] = Math.min(RATING_MAX, Math.max(RATING_MIN, isNaN(v) ? RATING_DEFAULT : v));
+    const clamped = Math.min(RATING_MAX, Math.max(RATING_MIN, isNaN(v) ? RATING_DEFAULT : v));
+    _ratings[idx] = clamped;
+    // Force the displayed value back to the clamped integer immediately
+    if (!isNaN(v) && (v < RATING_MIN || v > RATING_MAX)) {
+      e.target.value = clamped;
+    }
   });
 
   return card;

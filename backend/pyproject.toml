@@ -13,13 +13,10 @@ dependencies = [
     "scikit-learn==1.7.2",
     "openai>=2.8.0,<3.0.0",
     "python-dotenv>=1.1.1,<2.0.0",
-    "ipykernel>=7.1.0,<8.0.0",
     "sqlalchemy>=2.0.44,<3.0.0",
-    "matplotlib>=3.10.7,<4.0.0",
     "psycopg2>=2.9.11,<3.0.0",
     "fastapi>=0.121.2,<0.122.0",
-    "uvicorn>=0.38.0,<0.39.0",
-    "lightgbm (>=4.6.0,<5.0.0)"
+    "uvicorn>=0.38.0,<0.39.0"
 ]
 
 [tool.poetry]

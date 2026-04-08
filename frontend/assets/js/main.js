@@ -299,6 +299,20 @@ function _showResultsUI(geojson) {
 
   // 2-column layout when sidebar is wide enough
   _attachListingResizeObserver(listingWrap);
+
+  // Set explicit pixel heights immediately so CSS % never interferes
+  requestAnimationFrame(() => {
+    const outputH   = outputBox.offsetHeight;
+    const handleH   = listingChatHandle.offsetHeight || 6;
+    const chatInitH = Math.max(140, Math.round(outputH * 0.3));
+    const listInitH = outputH - handleH - chatInitH;
+    if (listInitH > 60) {
+      listingWrap.style.flex   = "none";
+      listingWrap.style.height = listInitH + "px";
+      chatPanel.style.flex     = "none";
+      chatPanel.style.height   = chatInitH + "px";
+    }
+  });
 }
 
 function _attachListingChatHandle(handle, listingWrap) {
@@ -323,7 +337,7 @@ function _attachListingChatHandle(handle, listingWrap) {
     const inputRow    = document.getElementById("chat-input-row");
     const chatMinH    = (explainRow ? explainRow.offsetHeight : 30)
                       + (inputRow  ? inputRow.offsetHeight   : 38)
-                      + 20; // padding + gap
+                      + 36; // padding + gaps + 16px margin-bottom on input row
     const maxListH  = outputH - handleH - chatMinH;
     const newListH  = Math.max(60, Math.min(maxListH, startListH + delta));
     const newChatH  = outputH - handleH - newListH;

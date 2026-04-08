@@ -25,6 +25,13 @@ BOROCODE_NO_MATCH = 2
 # Value assigned when a property's borocode DOES match
 BOROCODE_MATCH    = 1
 
+# Engineered feature names — in the same column order produced by _engineer_features()
+ENGINEERED_FEATURE_NAMES = [
+    "rent_knn", "sqft", "bedroomnum_diff", "bathroomnum_diff",
+    "borocode_match", "built_year_diff", "bld_story_diff",
+    "elevator", "dist_greenspace_ft", "dist_subway_ft", "noise_level_ord",
+]
+
 # ---------------------------------------------------------------------------
 
 
@@ -132,11 +139,6 @@ def train_and_predict(
     model.fit(X_train_sc, y_train)
     print(f"[ols] model fit  coef={model.coef_.round(4).tolist()}  intercept={model.intercept_:.4f}")
 
-    ENGINEERED_FEATURE_NAMES = [
-        "rent_knn", "sqft", "bedroomnum_diff", "bathroomnum_diff",
-        "borocode_match", "built_year_diff", "bld_story_diff",
-        "elevator", "dist_greenspace_ft", "dist_subway_ft", "noise_level_ord",
-    ]
     coef_dict = dict(zip(ENGINEERED_FEATURE_NAMES, model.coef_.round(4).tolist()))
 
     predictions = model.predict(X_all_sc)
