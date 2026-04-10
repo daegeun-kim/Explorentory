@@ -33,12 +33,12 @@ FastAPI Backend  ─────────────────────
   /explain         →  per-property LLM narrative                   │
   /explain_result  →  OLS coefficient interpretation (LLM)         │
   /chat            →  NL → structured filter/sort JSON (LLM)       │
-        │                                                           │
-        ▼                                                           │
-Vanilla JS Frontend                                                 │
+        │                                                          │
+        ▼                                                          │
+Vanilla JS Frontend                                                │
   MapLibre GL map  ←─ GeoJSON (5,000 properties, choropleth)       │
-  Canvas charts    ←─ histogram + radar triangle                    │
-  Chat panel       ←────────────────────────────────────────────────┘
+  Canvas charts    ←─ histogram + radar triangle                   │
+  Chat panel       ←───────────────────────────────────────────────┘
                         client-side filter/sort from LLM JSON
 ```
 
