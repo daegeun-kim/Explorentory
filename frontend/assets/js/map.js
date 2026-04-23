@@ -239,6 +239,12 @@ let _activeView           = null;   // "neighborhoods" | "single" | "recommendat
 let _neighborhoodsGeojson = null;
 let _singlePropertyObj    = null;
 
+// Orbit camera state
+let _orbitRAF    = null;
+let _orbitActive = false;
+let _orbitLon    = 0;
+let _orbitLat    = 0;
+
 //--------------------------------------------------------------------
 // Source / layer ids — survey step (all 10 properties shown at once)
 //--------------------------------------------------------------------
@@ -287,7 +293,42 @@ function clearNeighborhoodLayer() {
 //--------------------------------------------------------------------
 // clearAllSources  (called from main.js on reset)
 //--------------------------------------------------------------------
+function _startOrbitCamera(lon, lat) {
+  if (lon !== undefined) { _orbitLon = lon; _orbitLat = lat; }
+  _orbitActive = true;
+  if (_orbitRAF) cancelAnimationFrame(_orbitRAF);
+  const DEGREES_PER_SEC = 12;
+  let lastTime = null;
+  function _step(ts) {
+    if (!_orbitActive) return;
+    if (lastTime !== null) {
+      const dt      = (ts - lastTime) / 1000;
+      const bearing = (map.getBearing() + DEGREES_PER_SEC * dt) % 360;
+      // Lock center to the property on every frame so the orbit is truly centered
+      map.jumpTo({ bearing, center: [_orbitLon, _orbitLat] });
+    }
+    lastTime  = ts;
+    _orbitRAF = requestAnimationFrame(_step);
+  }
+  _orbitRAF = requestAnimationFrame(_step);
+}
+
+window.stopOrbitCamera = function () {
+  _orbitActive = false;
+  if (_orbitRAF) { cancelAnimationFrame(_orbitRAF); _orbitRAF = null; }
+};
+
+// Switch to interactive mode on any user-initiated map input.
+// mousedown covers click, drag, right-click-rotate, and Ctrl+pitch.
+// wheel covers scroll-to-zoom. touchstart covers mobile.
+// We do NOT use rotatestart/pitchstart because map.jumpTo (in the orbit loop)
+// fires those programmatically, which would immediately cancel the orbit.
+map.on("mousedown",  () => window.stopOrbitCamera());
+map.on("wheel",      () => window.stopOrbitCamera());
+map.on("touchstart", () => window.stopOrbitCamera());
+
 function clearAllSources() {
+  window.stopOrbitCamera();
   clearNeighborhoodLayer();
   clearSurveyPropertiesLayer();
   [propExtId, propFillId, propCircleId].forEach(id => {
@@ -825,11 +866,14 @@ function showSinglePropertyOnMap(property) {
     if (c) { lon = c[0]; lat = c[1]; }
   }
   if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+  window.stopOrbitCamera();
   map.flyTo({
     center:   [lon, lat],
-    zoom:     Math.max(map.getZoom(), 12),
+    zoom:     14,
+    pitch:    45,
     duration: Math.round(600 / SINGLE_PROP_FIT_SPEED),
   });
+  map.once("moveend", () => _startOrbitCamera(lon, lat));
 }
 
 //--------------------------------------------------------------------
@@ -1061,6 +1105,7 @@ function _applyRecommendationLayers(geojsonObj, colorExpr, fitPadding) {
 //--------------------------------------------------------------------
 function showRecommendationsOnMap(geojson) {
   // Clean up survey stage artefacts before showing final results
+  window.stopOrbitCamera();
   clearSurveyPropertiesLayer();
   clearSurveyPin();
 
@@ -1167,7 +1212,13 @@ function flyToProperty(props) {
     if (c) { lon = c[0]; lat = c[1]; }
   }
   if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
-  map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 15), duration: 600 });
+  if (_activeView === "single") {
+    window.stopOrbitCamera();
+    map.flyTo({ center: [lon, lat], zoom: 14, pitch: 45, duration: 600 });
+    map.once("moveend", () => _startOrbitCamera(lon, lat));
+  } else {
+    map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 14), duration: 600 });
+  }
 }
 
 //--------------------------------------------------------------------
@@ -1187,6 +1238,7 @@ function flyToProperty(props) {
   }
 
   pitchBtn.addEventListener("click", () => {
+    window.stopOrbitCamera();
     if (map.getPitch() > 5) {
       map.easeTo({ pitch: 0, duration: 600 });
     } else {
@@ -1195,6 +1247,7 @@ function flyToProperty(props) {
   });
 
   northBtn.addEventListener("click", () => {
+    window.stopOrbitCamera();
     map.easeTo({ bearing: 0, duration: 500 });
   });
 

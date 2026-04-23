@@ -57,7 +57,7 @@ function _setStage(num) {
     const cls = n < num ? "stage-step done" : n === num ? "stage-step active" : "stage-step";
     const num_display = n < num ? "✓" : String(n);
     return `<span class="${cls}"><span class="stage-num">${num_display}</span><span class="stage-label">${label}</span></span>`
-         + (i < _STAGE_LABELS.length - 1 ? `<span class="stage-sep">›</span>` : "");
+        + (i < _STAGE_LABELS.length - 1 ? `<span class="stage-sep">›</span>` : "");
   }).join("");
 }
 
@@ -293,9 +293,10 @@ function _showResultsUI(geojson) {
   outputBox.appendChild(listingChatHandle);
   _attachListingChatHandle(listingChatHandle, listingWrap);
 
-  // Chat panel (fixed height at bottom)
+  // Chat panel (log only — controls are in #chat-controls anchored to #message bottom)
   const chatPanel = _buildChatPanel();
   outputBox.appendChild(chatPanel);
+  _buildChatControls();
 
   // 2-column layout when sidebar is wide enough
   _attachListingResizeObserver(listingWrap);
@@ -331,13 +332,8 @@ function _attachListingChatHandle(handle, listingWrap) {
     const container = outputBox || document.getElementById("output-message");
     const outputH   = container ? container.offsetHeight : window.innerHeight;
     const handleH   = handle.offsetHeight || 6;
-    // Compute min chat height from its fixed children so input row never disappears
     const chatPanel   = document.getElementById("chat-panel");
-    const explainRow  = document.getElementById("chat-explain-row");
-    const inputRow    = document.getElementById("chat-input-row");
-    const chatMinH    = (explainRow ? explainRow.offsetHeight : 30)
-                      + (inputRow  ? inputRow.offsetHeight   : 38)
-                      + 36; // padding + gaps + 16px margin-bottom on input row
+    const chatMinH    = 40; // minimum log height; controls are anchored outside
     const maxListH  = outputH - handleH - chatMinH;
     const newListH  = Math.max(60, Math.min(maxListH, startListH + delta));
     const newChatH  = outputH - handleH - newListH;
@@ -391,18 +387,23 @@ function _renderTop10Cards(container, geojson) {
 
     const rent   = p.rent_knn      != null ? `$${Math.round(p.rent_knn).toLocaleString()}/mo` : "—";
     const sqft   = p.sqft          != null ? `${Math.round(p.sqft).toLocaleString()} sqft`    : null;
-    const beds   = p.bedroomnum    != null ? `${p.bedroomnum} bd`   : null;
-    const baths  = p.bathroomnum   != null ? `${p.bathroomnum} ba`  : null;
-    const lvroom = p.livingroomnum != null && Number(p.livingroomnum) > 0 ? `${p.livingroomnum} lr` : null;
+    const bd     = Number(p.bedroomnum)    || 0;
+    const ba     = Number(p.bathroomnum)   || 0;
+    const lr     = Number(p.livingroomnum) || 0;
+    const beds   = p.bedroomnum    != null ? `${bd} Bedroom${bd !== 1 ? "s" : ""}`            : null;
+    const baths  = p.bathroomnum   != null ? `${ba} Bathroom${ba !== 1 ? "s" : ""}`           : null;
+    const lvroom = lr > 0                  ? `${lr} Living Room${lr !== 1 ? "s" : ""}`        : "Studio";
     const hood   = p.small_n       || "—";
-    const tags   = [sqft, beds, baths, lvroom].filter(Boolean);
+    const rightTags = [sqft, beds, baths, lvroom].filter(Boolean);
 
     const card = document.createElement("div");
     card.className = "top10-card";
     card.innerHTML = `
-      <div class="top10-card-hood">#${idx + 1}&nbsp;${hood}</div>
-      <div class="top10-card-rent">${rent}</div>
-      <div class="top10-card-tags">${tags.map(t => `<span class="top10-tag">${t}</span>`).join("")}</div>`;
+      <div class="top10-card-left">
+        <div class="top10-card-hood">#${idx + 1}&nbsp;${hood}</div>
+        <div class="top10-card-rent">${rent}</div>
+      </div>
+      <div class="top10-card-right">${rightTags.map(t => `<span class="top10-tag">${t}</span>`).join("")}</div>`;
 
     card.addEventListener("click", () => {
       document.querySelectorAll(".top10-card").forEach(c => c.classList.remove("selected"));
@@ -417,9 +418,9 @@ function _renderTop10Cards(container, geojson) {
     explainBtn.textContent = "Explain";
     explainBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      _callExplain(p, card);
+      _callExplain(p, card.querySelector(".top10-card-left"));
     });
-    card.appendChild(explainBtn);
+    card.querySelector(".top10-card-left").appendChild(explainBtn);
     container.appendChild(card);
   });
 }
@@ -431,10 +432,24 @@ function _buildChatPanel() {
   const panel = document.createElement("div");
   panel.id = "chat-panel";
 
-  // Message log
+  // Message log only — bottom rows go into #chat-controls (zoom-proof)
   const log = document.createElement("div");
   log.id = "chat-log";
   panel.appendChild(log);
+
+  return panel;
+}
+
+function _buildChatControls() {
+  // Remove any existing controls
+  const existing = document.getElementById("chat-controls");
+  if (existing) existing.remove();
+
+  const msgEl = document.getElementById("message");
+  if (!msgEl) return;
+
+  const ctrl = document.createElement("div");
+  ctrl.id = "chat-controls";
 
   // "Explain Result" button row
   const explainRow = document.createElement("div");
@@ -446,15 +461,14 @@ function _buildChatPanel() {
   explainResultBtn.addEventListener("click", _onExplainResult);
   explainRow.appendChild(explainResultBtn);
 
-  // Reset filter button (hidden until a filter/sort is active)
   const resetFilterBtn = document.createElement("button");
-  resetFilterBtn.id          = "chat-reset-filter-btn";
-  resetFilterBtn.textContent = "Reset";
-  resetFilterBtn.title       = "Reset to original results";
+  resetFilterBtn.id            = "chat-reset-filter-btn";
+  resetFilterBtn.textContent   = "Reset";
+  resetFilterBtn.title         = "Reset to original results";
   resetFilterBtn.style.display = "none";
   resetFilterBtn.addEventListener("click", _onResetChatFilter);
   explainRow.appendChild(resetFilterBtn);
-  panel.appendChild(explainRow);
+  ctrl.appendChild(explainRow);
 
   // Input row
   const inputRow = document.createElement("div");
@@ -480,9 +494,10 @@ function _buildChatPanel() {
 
   inputRow.appendChild(input);
   inputRow.appendChild(sendBtn);
-  panel.appendChild(inputRow);
+  ctrl.appendChild(inputRow);
 
-  return panel;
+  msgEl.appendChild(ctrl);
+  if (outputBox) outputBox.classList.add("has-chat-controls");
 }
 
 //--------------------------------------------------------------------
@@ -848,9 +863,16 @@ if (resetBtn) {
     _currentOlsCoef   = null;
     _chatHistory      = [];
 
+    document.body.classList.remove("rating-stage");
+    if (typeof window.stopOrbitCamera === "function") window.stopOrbitCamera();
+
     if (typeof clearAllSources === "function") clearAllSources();
     if (typeof window.clearCharts === "function") window.clearCharts();
     hideMapLoading();
+    setTimeout(() => { if (window.map) window.map.resize(); }, 0);
+    const chatCtrl = document.getElementById("chat-controls");
+    if (chatCtrl) chatCtrl.remove();
+    if (outputBox) outputBox.classList.remove("has-chat-controls");
 
     if (outputBox) {
       outputBox.innerHTML = `

@@ -30,7 +30,9 @@ const PRIORITY_KEYS = ["rent", "location", "sqft"];
 
   modal.innerHTML = `
     <button id="pref-invert" title="Invert colors">&#9680;</button>
-    <div id="pref-title">Explorentory</div>
+    <div id="pref-title">
+      <img id="pref-logo" src="assets/images/explorentory_dark.png" alt="Explorentory" style="width:100%;height:auto;display:block;">
+    </div>
     <div id="pref-subtitle">Find your perfect NYC rental</div>
 
     <div class="pref-field">
@@ -67,7 +69,7 @@ const PRIORITY_KEYS = ["rent", "location", "sqft"];
           <div class="pref-priority-name">Sq. Footage</div>
         </div>
       </div>
-      <div id="pref-priority-hint">Click 1st → 2nd → 3rd &nbsp;·&nbsp; click again to unrank</div>
+      <div id="pref-priority-hint">Click <span class="pref-rank-badge">1</span> → <span class="pref-rank-badge">2</span> → <span class="pref-rank-badge">3</span> &nbsp;·&nbsp; click again to unrank</div>
     </div>
 
     <div class="pref-field">
@@ -82,11 +84,23 @@ const PRIORITY_KEYS = ["rent", "location", "sqft"];
   document.body.appendChild(overlay);
 
   // ---- Invert button (mirrors the main color-invert button) ----
+  function _updateLogo() {
+    const logo = document.getElementById("pref-logo");
+    if (logo) logo.src = document.body.classList.contains("bright")
+      ? "assets/images/explorentory_bright.png"
+      : "assets/images/explorentory_dark.png";
+  }
+
   document.getElementById("pref-invert").addEventListener("click", () => {
     document.body.classList.toggle("bright");
+    _updateLogo();
     if (typeof window.toggleMapStyle === "function") window.toggleMapStyle();
     if (typeof window.redrawCharts   === "function") window.redrawCharts();
   });
+
+  // Also sync logo when main invert button is clicked
+  const _mainInvert = document.getElementById("color-invert");
+  if (_mainInvert) _mainInvert.addEventListener("click", _updateLogo);
 
   // ---- Live rent display ----
   const rentSlider = document.getElementById("pref-rent");

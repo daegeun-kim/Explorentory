@@ -36,14 +36,14 @@ const CHART_TEXT_COLOR        = "#f0f0f0";  // dark
 const CHART_TEXT_COLOR_BRIGHT = "#111111";  // bright
 
 // Radar triangle — mode-independent
-const RADAR_MARGIN_TOP         = 36;
-const RADAR_MARGIN_BOTTOM      = 36;
+const RADAR_MARGIN_TOP         = 8;
+const RADAR_MARGIN_BOTTOM      = 8;
 const RADAR_OUTER_STROKE_WIDTH = 0.5;
 const RADAR_GUIDE_LINE_WIDTH   = 0.5;
 const RADAR_GUIDE_DASH         = [3, 4];
 const RADAR_INNER_ALPHA        = 0.5;
 const RADAR_DOT_RADIUS         = 4;
-const RADAR_LABEL_PAD          = 20;
+const RADAR_LABEL_PAD          = 10;
 const RADAR_FONT               = "14px Roboto, sans-serif";
 
 // Radar triangle — dark / bright color pairs
@@ -880,15 +880,58 @@ function _drawRadarTriangle() {
 
   const N  = _activeRadarAxes.length;
   const cx = W / 2;
-  // R constrained by both vertical and horizontal space with label padding
-  const rFromH = Math.max(1, (H - RADAR_MARGIN_TOP - RADAR_MARGIN_BOTTOM) / 2);
-  const rFromW = Math.max(1, W / 2 - RADAR_LABEL_PAD - 10);
-  const R      = Math.min(rFromH, rFromW);
-  _radarR      = R;
-  const cy     = (RADAR_MARGIN_TOP + (H - RADAR_MARGIN_BOTTOM)) / 2;
 
   // Evenly spaced vertex angles starting from top (-PI/2)
   const ANGLES = Array.from({ length: N }, (_, i) => -Math.PI / 2 + (2 * Math.PI * i / N));
+
+  // Centroid anchor: fixed at the vertical center of the available space.
+  const cy = (RADAR_MARGIN_TOP + H - RADAR_MARGIN_BOTTOM) / 2;
+
+  // Measure per-label text: max word width and total block height (one word per line).
+  ctx.font = RADAR_FONT;
+  const _lineH      = 15;
+  const _labelWords = _activeRadarAxes.map(axis => axis.label.split(" "));
+  const _textW      = _labelWords.map(words => Math.max(...words.map(w => ctx.measureText(w).width)));
+  const _textH      = _labelWords.map(words => words.length * _lineH);
+
+  // Start R from the available half-height (symmetric around centroid).
+  let R = Math.max(1, (H - RADAR_MARGIN_TOP - RADAR_MARGIN_BOTTOM) / 2);
+
+  // Tighten R per-vertex so polygon + label text stays inside canvas bounds.
+  for (let i = 0; i < N; i++) {
+    const a    = ANGLES[i];
+    const cosA = Math.cos(a);
+    const sinA = Math.sin(a);
+    const tw   = _textW[i];
+    const th   = _textH[i];
+
+    const alignH = cosA < -0.1 ? "right" : cosA > 0.1 ? "left" : "center";
+    const alignV = sinA < -0.1 ? "bottom" : sinA > 0.1 ? "top"  : "middle";
+
+    const extRight = alignH === "left"   ? tw   : alignH === "center" ? tw / 2 : 0;
+    const extLeft  = alignH === "right"  ? tw   : alignH === "center" ? tw / 2 : 0;
+    const extDown  = alignV === "top"    ? th   : alignV === "middle" ? th / 2  : 0;
+    const extUp    = alignV === "bottom" ? th   : alignV === "middle" ? th / 2  : 0;
+
+    // Right boundary
+    if (cosA > 0.001) {
+      R = Math.min(R, Math.max(1, (W / 2 - RADAR_LABEL_PAD * cosA - extRight) / cosA));
+    }
+    // Left boundary
+    if (cosA < -0.001) {
+      R = Math.min(R, Math.max(1, (W / 2 - extLeft) / (-cosA) - RADAR_LABEL_PAD));
+    }
+    // Bottom boundary
+    if (sinA > 0.001) {
+      R = Math.min(R, Math.max(1, (H - RADAR_MARGIN_BOTTOM - cy - RADAR_LABEL_PAD * sinA - extDown) / sinA));
+    }
+    // Top boundary
+    if (sinA < -0.001) {
+      R = Math.min(R, Math.max(1, (cy - RADAR_MARGIN_TOP - RADAR_LABEL_PAD * (-sinA) - extUp) / (-sinA)));
+    }
+  }
+
+  _radarR = R;
 
   const verts = ANGLES.map(a => ({
     x: cx + R * Math.cos(a),
@@ -918,19 +961,23 @@ function _drawRadarTriangle() {
   }
   ctx.setLineDash([]);
 
-  // --- Vertex labels (colored by their pool index color) ---
-  ctx.font = RADAR_FONT;
+  // --- Vertex labels (colored by their pool index color) — one word per line ---
+  ctx.font         = RADAR_FONT;
+  ctx.textBaseline = "top";
   _activeRadarAxes.forEach((axis, i) => {
-    const a  = ANGLES[i];
-    const lx = cx + (R + RADAR_LABEL_PAD) * Math.cos(a);
-    const ly = cy + (R + RADAR_LABEL_PAD) * Math.sin(a);
+    const a       = ANGLES[i];
+    const lx      = cx + (R + RADAR_LABEL_PAD) * Math.cos(a);
+    const ly      = cy + (R + RADAR_LABEL_PAD) * Math.sin(a);
     const poolIdx = RADAR_AXES_POOL.findIndex(p => p.key === axis.key);
-    ctx.fillStyle    = rc.radarAxisColors[poolIdx] || rc.radarAxisColors[0];
-    const cosA = Math.cos(a);
-    const sinA = Math.sin(a);
-    ctx.textAlign    = cosA < -0.1 ? "right" : cosA > 0.1 ? "left" : "center";
-    ctx.textBaseline = sinA < -0.1 ? "bottom" : sinA > 0.1 ? "top"  : "middle";
-    ctx.fillText(axis.label, lx, ly);
+    ctx.fillStyle = rc.radarAxisColors[poolIdx] || rc.radarAxisColors[0];
+    const cosA    = Math.cos(a);
+    const sinA    = Math.sin(a);
+    ctx.textAlign = cosA < -0.1 ? "right" : cosA > 0.1 ? "left" : "center";
+    const words   = _labelWords[i];
+    const totalH  = _textH[i];
+    const alignV  = sinA < -0.1 ? "bottom" : sinA > 0.1 ? "top" : "middle";
+    const lyStart = alignV === "bottom" ? ly - totalH : alignV === "middle" ? ly - totalH / 2 : ly;
+    words.forEach((w, wi) => ctx.fillText(w, lx, lyStart + wi * _lineH));
   });
 
   // --- Inner polygon for selected property ---
