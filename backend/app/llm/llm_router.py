@@ -18,10 +18,9 @@ def explain_property(user_prefs: dict, property_info: dict) -> str:
         {
             "role": "system",
             "content": (
-                "You are a concise NYC rental advisor. "
+                "You are a concise NYC rental advisor explaining to someone looking for a property to rent. "
                 "In 2-3 sentences explain how well the property matches the user's needs. "
-                "Be specific about rent, size, location, and any stated concern. "
-                "Plain text only — no bullet points, no JSON."
+                "Plain text only, either in paragraph or bullet point."
             ),
         },
         {
@@ -131,4 +130,4 @@ def chat_query(user_message: str, history: list) -> dict:
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        return {"message": "I had trouble understanding that. Could you rephrase your request to filter or rank the properties?"}
+        return {"message": "I have trouble understanding that. Could you rephrase your request?"}
