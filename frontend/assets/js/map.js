@@ -1034,6 +1034,23 @@ function _attachExplainClickPopup(layerId) {
       }
     });
 
+    const contactBtn = document.createElement("button");
+    contactBtn.className   = "contact-agent-btn";
+    contactBtn.textContent = "Contact Agent";
+    const contactInfo = document.createElement("div");
+    contactInfo.className = "contact-agent-info";
+    if (typeof window.getAgentInfo === "function") {
+      const agent = window.getAgentInfo(props.borocode);
+      contactInfo.textContent = `Contact Real Estate Agent (${agent.name}) ${agent.phone}`;
+    }
+    contactInfo.hidden = true;
+    contactBtn.addEventListener("click", () => {
+      contactInfo.hidden = !contactInfo.hidden;
+      contactBtn.textContent = contactInfo.hidden ? "Contact Agent" : "Hide Agent";
+    });
+    container.appendChild(contactBtn);
+    container.appendChild(contactInfo);
+
     _explainClickPopup = new maplibregl.Popup({
       closeButton:  true,
       closeOnClick: false,

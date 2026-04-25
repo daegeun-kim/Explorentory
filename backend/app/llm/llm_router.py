@@ -62,10 +62,11 @@ def explain_result(user_prefs: dict, priority_order: list, ols_coef: dict,
             "role": "system",
             "content": (
                 "You are a friendly NYC rental advisor. "
-                "Based on OLS regression coefficients from the user's property ratings, "
+                "Based on OLS regression coefficients from the user's property ratings compared to user preference and priority, "
                 "write 2-4 sentences telling the user what their survey revealed about their preferences. "
                 "Speak directly to the user in plain conversational English — no numbers, no coefficient values, no technical terms. "
-                "Focus only on the top 3-4 most influential features (highest absolute coefficient). "
+                "Focus only on the top 1-2 noticeably influential features (highest absolute coefficient) except rent, location, sqft, room counts. "
+                "Mention rent, location, sqft, room counts if one of them are considered less important from the survey."
                 "Translate feature names: rent_knn=rent, sqft=apartment size, bedroomnum_diff=bedroom match, "
                 "bathroomnum_diff=bathroom match, borocode_match=staying in same borough, "
                 "built_year_diff=building age, bld_story_diff=number of floors, elevator=elevator access, "

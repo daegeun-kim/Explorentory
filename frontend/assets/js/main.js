@@ -40,6 +40,18 @@ let _chatHistory            = [];     // [{role, content}] for multi-turn chat
 let _chatLoadedProps        = [];     // properties dragged into chat context (max 3)
 let _lastBotBubble          = null;   // last bot message element (gets "Return to this state" when next query runs)
 
+// Dummy real estate agent directory by borough (for Contact Agent feature)
+const _DUMMY_AGENTS = {
+  1: { name: "Manhattan Premier Realty",    phone: "+1 212-555-0191" },
+  2: { name: "Bronx Home Advisors",         phone: "+1 929-555-0182" },
+  3: { name: "Brooklyn Property Group",     phone: "+1 718-555-0173" },
+  4: { name: "Queens Real Estate Partners", phone: "+1 718-555-0164" },
+  5: { name: "Staten Island Realty Co.",    phone: "+1 718-555-0155" },
+};
+window.getAgentInfo = function (borocode) {
+  return _DUMMY_AGENTS[Number(borocode)] || { name: "NYC Home Advisors", phone: "+1 212-555-0100" };
+};
+
 //--------------------------------------------------------------------
 // Stage indicator — 4-step progress bar shown in the sidebar
 //--------------------------------------------------------------------
@@ -423,14 +435,33 @@ function _renderTop10Cards(container, geojson) {
       if (typeof window.highlightPropertyOnMap === "function") window.highlightPropertyOnMap(f);
     });
 
+    const cardLeft = card.querySelector(".top10-card-left");
+
     const explainBtn = document.createElement("button");
     explainBtn.className   = "explain-btn";
     explainBtn.textContent = "Explain";
     explainBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      _callExplain(p, card.querySelector(".top10-card-left"));
+      _callExplain(p, cardLeft);
     });
-    card.querySelector(".top10-card-left").appendChild(explainBtn);
+    cardLeft.appendChild(explainBtn);
+
+    const contactBtn = document.createElement("button");
+    contactBtn.className   = "contact-agent-btn";
+    contactBtn.textContent = "Contact Agent";
+    const contactInfo = document.createElement("div");
+    contactInfo.className = "contact-agent-info";
+    const agent = window.getAgentInfo(p.borocode);
+    contactInfo.textContent = `Contact Real Estate Agent (${agent.name}) ${agent.phone}`;
+    contactInfo.hidden = true;
+    contactBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      contactInfo.hidden = !contactInfo.hidden;
+      contactBtn.textContent = contactInfo.hidden ? "Contact Agent" : "Hide Agent";
+    });
+    cardLeft.appendChild(contactBtn);
+    cardLeft.appendChild(contactInfo);
+
     container.appendChild(card);
   });
 }
@@ -710,6 +741,12 @@ function _applyChatResult(result) {
   // EXPLAIN — answer question without changing the displayed data
   if (result.explain) {
     _chatAppend("bot", result.message || "I'm not sure how to answer that.");
+    return;
+  }
+
+  // CONTACT (final choice) — show agent info without changing the displayed data
+  if (result.contact) {
+    _chatAppend("bot", result.message || "Ready to connect you with a real estate agent!");
     return;
   }
 
