@@ -37,6 +37,8 @@ let _currentGeojson         = null;   // full recommendation GeoJSON from /recom
 let _currentOlsCoef         = null;   // OLS coefficients from /recommend
 let _activeGeojson          = null;   // currently displayed (may be filtered/sorted)
 let _chatHistory            = [];     // [{role, content}] for multi-turn chat
+let _chatLoadedProps        = [];     // properties dragged into chat context (max 3)
+let _lastBotBubble          = null;   // last bot message element (gets "Return to this state" when next query runs)
 
 //--------------------------------------------------------------------
 // Stage indicator — 4-step progress bar shown in the sidebar
@@ -293,35 +295,37 @@ function _showResultsUI(geojson) {
   outputBox.appendChild(listingChatHandle);
   _attachListingChatHandle(listingChatHandle, listingWrap);
 
-  // Chat panel (log only — controls are in #chat-controls anchored to #message bottom)
+  // Chat panel (controls are appended inside chat-panel after it is built)
   const chatPanel = _buildChatPanel();
   outputBox.appendChild(chatPanel);
   _buildChatControls();
 
+  // Default welcome message — treated as the first "state" bubble so it can get a "Return to this state" button later
+  const _welcomeBubble = _chatAppend("bot", "Your recommendations are ready! Drag any property card or map pin here to ask questions about it, or type below to filter by rent, size, neighborhood, noise level, subway distance, and more.");
+  if (_welcomeBubble) {
+    _welcomeBubble._chatSnapshot = _activeGeojson;
+    _lastBotBubble = _welcomeBubble;
+  }
+
   // 2-column layout when sidebar is wide enough
   _attachListingResizeObserver(listingWrap);
 
-  // Set explicit pixel heights immediately so CSS % never interferes
+  // Pin chat panel at a default height; listing wrap fills remaining space via flex: 1
   requestAnimationFrame(() => {
     const outputH   = outputBox.offsetHeight;
-    const handleH   = listingChatHandle.offsetHeight || 6;
     const chatInitH = Math.max(140, Math.round(outputH * 0.3));
-    const listInitH = outputH - handleH - chatInitH;
-    if (listInitH > 60) {
-      listingWrap.style.flex   = "none";
-      listingWrap.style.height = listInitH + "px";
-      chatPanel.style.flex     = "none";
-      chatPanel.style.height   = chatInitH + "px";
-    }
+    chatPanel.style.flex   = "none";
+    chatPanel.style.height = chatInitH + "px";
   });
 }
 
 function _attachListingChatHandle(handle, listingWrap) {
-  let resizing = false, startY = 0, startListH = 0;
+  let resizing = false, startY = 0, startChatH = 0;
   handle.addEventListener("mousedown", (e) => {
-    resizing    = true;
-    startY      = e.clientY;
-    startListH  = listingWrap.offsetHeight;
+    resizing   = true;
+    startY     = e.clientY;
+    const chatPanel = document.getElementById("chat-panel");
+    startChatH = chatPanel ? chatPanel.offsetHeight : 0;
     document.body.style.cursor     = "row-resize";
     document.body.style.userSelect = "none";
     e.preventDefault();
@@ -332,17 +336,18 @@ function _attachListingChatHandle(handle, listingWrap) {
     const container = outputBox || document.getElementById("output-message");
     const outputH   = container ? container.offsetHeight : window.innerHeight;
     const handleH   = handle.offsetHeight || 6;
-    const chatPanel   = document.getElementById("chat-panel");
-    const chatMinH    = 40; // minimum log height; controls are anchored outside
-    const maxListH  = outputH - handleH - chatMinH;
-    const newListH  = Math.max(60, Math.min(maxListH, startListH + delta));
-    const newChatH  = outputH - handleH - newListH;
-    listingWrap.style.flex   = "none";
-    listingWrap.style.height = newListH + "px";
+    const chatPanel = document.getElementById("chat-panel");
+    const chatMinH  = 100; // controls (~80px) + minimum log height
+    const maxChatH  = outputH - handleH - 60; // leave at least 60px for listing
+    // Dragging handle down shrinks chat (delta > 0 → chat smaller)
+    const newChatH  = Math.max(chatMinH, Math.min(maxChatH, startChatH - delta));
     if (chatPanel) {
       chatPanel.style.flex   = "none";
       chatPanel.style.height = newChatH + "px";
     }
+    // listing wrap auto-fills remaining space — no explicit height needed
+    listingWrap.style.flex   = "1 1 0";
+    listingWrap.style.height = "";
   });
   document.addEventListener("mouseup", () => {
     if (resizing) {
@@ -378,8 +383,7 @@ function _renderTop10Cards(container, geojson) {
 
   const hdr = document.createElement("div");
   hdr.className   = "top10-header";
-  const total = geojson.features.length;
-  hdr.textContent = `Top ${features.length} of ${total.toLocaleString()} Properties`;
+  hdr.textContent = "TOP 10 RECOMMENDATIONS";
   container.appendChild(hdr);
 
   features.forEach((f, idx) => {
@@ -397,13 +401,19 @@ function _renderTop10Cards(container, geojson) {
     const rightTags = [sqft, beds, baths, lvroom].filter(Boolean);
 
     const card = document.createElement("div");
-    card.className = "top10-card";
+    card.className  = "top10-card";
+    card.draggable  = true;
     card.innerHTML = `
       <div class="top10-card-left">
         <div class="top10-card-hood">#${idx + 1}&nbsp;${hood}</div>
         <div class="top10-card-rent">${rent}</div>
       </div>
       <div class="top10-card-right">${rightTags.map(t => `<span class="top10-tag">${t}</span>`).join("")}</div>`;
+
+    card.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", JSON.stringify(p));
+      e.dataTransfer.effectAllowed = "copy";
+    });
 
     card.addEventListener("click", () => {
       document.querySelectorAll(".top10-card").forEach(c => c.classList.remove("selected"));
@@ -432,13 +442,78 @@ function _buildChatPanel() {
   const panel = document.createElement("div");
   panel.id = "chat-panel";
 
-  // Message log only — bottom rows go into #chat-controls (zoom-proof)
+  // Message log (prop bubbles appear inline here)
   const log = document.createElement("div");
   log.id = "chat-log";
   panel.appendChild(log);
 
+  // Drop zone: accept dragged property cards and map pins
+  panel.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    panel.classList.add("drag-over");
+  });
+  panel.addEventListener("dragleave", (e) => {
+    if (!panel.contains(e.relatedTarget)) panel.classList.remove("drag-over");
+  });
+  panel.addEventListener("drop", (e) => {
+    e.preventDefault();
+    panel.classList.remove("drag-over");
+    try {
+      const prop = JSON.parse(e.dataTransfer.getData("text/plain"));
+      if (prop && typeof prop === "object") window.addPropToChat(prop);
+    } catch (_) {}
+  });
+
   return panel;
 }
+
+//--------------------------------------------------------------------
+// Property context helpers — bubbles appear inline in chat-log
+//--------------------------------------------------------------------
+window.addPropToChat = function (prop) {
+  const MAX = 3;
+  if (_chatLoadedProps.length >= MAX) {
+    _chatAppend("bot", "Max 3 properties — remove one first.");
+    return;
+  }
+  const isDupe = _chatLoadedProps.some(
+    p => p.centroid_lon === prop.centroid_lon && p.centroid_lat === prop.centroid_lat
+  );
+  if (isDupe) return;
+
+  _chatLoadedProps.push(prop);
+
+  const log = document.getElementById("chat-log");
+  if (!log) return;
+
+  const hood = prop.small_n || prop.large_n || "Property";
+  const rent = prop.rent_knn != null ? ` · $${Math.round(prop.rent_knn).toLocaleString()}/mo` : "";
+
+  const bubble = document.createElement("div");
+  bubble.className          = "chat-bubble chat-bubble-prop chat-bubble-prop-staged";
+  bubble.dataset.propBubble = "staged";
+
+  const label = document.createElement("span");
+  label.textContent = `▣ ${hood}${rent}`;
+
+  const rm = document.createElement("button");
+  rm.className   = "chat-bubble-prop-remove";
+  rm.textContent = "×";
+  rm.title       = "Remove from chat";
+  rm.addEventListener("click", () => {
+    const idx = _chatLoadedProps.findIndex(
+      p => p.centroid_lon === prop.centroid_lon && p.centroid_lat === prop.centroid_lat
+    );
+    if (idx !== -1) _chatLoadedProps.splice(idx, 1);
+    bubble.remove();
+  });
+
+  bubble.appendChild(label);
+  bubble.appendChild(rm);
+  log.appendChild(bubble);
+  log.scrollTop = log.scrollHeight;
+};
 
 function _buildChatControls() {
   // Remove any existing controls
@@ -496,8 +571,8 @@ function _buildChatControls() {
   inputRow.appendChild(sendBtn);
   ctrl.appendChild(inputRow);
 
-  msgEl.appendChild(ctrl);
-  if (outputBox) outputBox.classList.add("has-chat-controls");
+  const chatPanel = document.getElementById("chat-panel");
+  if (chatPanel) chatPanel.appendChild(ctrl);
 }
 
 //--------------------------------------------------------------------
@@ -505,12 +580,13 @@ function _buildChatControls() {
 //--------------------------------------------------------------------
 function _chatAppend(role, text) {
   const log = document.getElementById("chat-log");
-  if (!log) return;
+  if (!log) return null;
   const el = document.createElement("div");
   el.className = `chat-bubble chat-bubble-${role}`;
   el.textContent = text;
   log.appendChild(el);
   log.scrollTop = log.scrollHeight;
+  return el;
 }
 
 function _chatShowSpinner() {
@@ -562,6 +638,15 @@ async function _onExplainResult() {
 async function _onChatSend(msg) {
   if (!_currentGeojson) return;
 
+  // Capture and commit staged prop bubbles before the user message
+  const propsToSend = [..._chatLoadedProps];
+  _chatLoadedProps  = [];
+  document.querySelectorAll(".chat-bubble-prop-staged").forEach(el => {
+    el.classList.remove("chat-bubble-prop-staged");
+    const rmBtn = el.querySelector(".chat-bubble-prop-remove");
+    if (rmBtn) rmBtn.remove();
+  });
+
   _chatHistory.push({ role: "user", content: msg });
   _chatAppend("user", msg);
 
@@ -572,7 +657,7 @@ async function _onChatSend(msg) {
   try {
     const res  = await fetch(`${API_BASE}/chat`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: msg, history: _chatHistory.slice(0, -1) }),
+      body: JSON.stringify({ message: msg, history: _chatHistory.slice(0, -1), properties: propsToSend }),
     });
     const data = await res.json();
     if (spinner) spinner.remove();
@@ -591,16 +676,50 @@ async function _onChatSend(msg) {
   if (sendBtn) sendBtn.disabled = false;
 }
 
+// Add a "Return to this state" button to a bubble. Safe to call multiple times (deduplicates).
+// On click: restores the bubble's own snapshot, demotes _lastBotBubble back to non-current,
+// and promotes this bubble as the new current (removes its own button).
+function _addRevertButton(bubble) {
+  if (!bubble || !bubble._chatSnapshot) return;
+  if (bubble.querySelector(".chat-revert-btn")) return;
+  const snapshot = bubble._chatSnapshot;
+  const revertBtn = document.createElement("button");
+  revertBtn.className   = "chat-revert-btn";
+  revertBtn.textContent = "↩ Return to this state";
+  revertBtn.addEventListener("click", () => {
+    _activeGeojson = snapshot;
+    if (typeof window.updateRecommendationData === "function") window.updateRecommendationData(snapshot);
+    if (typeof window.initCharts             === "function") window.initCharts(snapshot);
+    if (typeof window.updateChoroplethMode   === "function") window.updateChoroplethMode("score");
+    const lw = document.getElementById("top10-listing-wrap");
+    if (lw) _renderTop10Cards(lw, snapshot);
+    // This bubble is now current — remove its button
+    revertBtn.remove();
+    // Previous current bubble is no longer current — give it a button
+    if (_lastBotBubble && _lastBotBubble !== bubble) {
+      _addRevertButton(_lastBotBubble);
+    }
+    _lastBotBubble = bubble;
+  });
+  bubble.appendChild(revertBtn);
+}
+
 function _applyChatResult(result) {
   if (!result) return;
 
-  // Guidance/clarification message — no data operation
+  // EXPLAIN — answer question without changing the displayed data
+  if (result.explain) {
+    _chatAppend("bot", result.message || "I'm not sure how to answer that.");
+    return;
+  }
+
+  // UNCLEAR / guidance — no data operation
   if (!result.filters && !result.sort) {
     _chatAppend("bot", result.message || "I'm not sure how to help with that. Try asking to filter by rent, size, noise level, elevator, or subway distance.");
     return;
   }
 
-  let workingGeo = _currentGeojson;
+  let workingGeo = _activeGeojson;
 
   // Apply filters
   if (result.filters && result.filters.length > 0) {
@@ -653,10 +772,30 @@ function _applyChatResult(result) {
     };
   }
 
-  // Always show the LLM's explanation message (with count appended)
+  // LLM signals a count cap — numeric N for explicit "top N" requests, true for ambiguous similarity
+  if (result.limit) {
+    const limitN = (typeof result.limit === "number")
+      ? Math.max(1, Math.round(result.limit))
+      : Math.max(10, Math.round(workingGeo.features.length * 0.2));
+    if (workingGeo.features.length > limitN) {
+      workingGeo = {
+        type: "FeatureCollection",
+        features: [...workingGeo.features]
+          .sort((a, b) => (Number(b.properties.final_score) || 0) - (Number(a.properties.final_score) || 0))
+          .slice(0, limitN),
+      };
+    }
+  }
+
+  // Demote the current state bubble — it is no longer current, so give it a "Return to this state" button
+  _addRevertButton(_lastBotBubble);
+
+  // Create new bot bubble and record its result snapshot — no button yet (it IS the current state)
   const n = workingGeo.features.length;
   const llmMsg = result.message || "";
-  _chatAppend("bot", llmMsg ? `${llmMsg} (${n.toLocaleString()} properties shown)` : `Showing ${n.toLocaleString()} properties.`);
+  const botBubble = _chatAppend("bot", llmMsg ? `${llmMsg} (${n.toLocaleString()} properties shown)` : `Showing ${n.toLocaleString()} properties.`);
+  if (botBubble) botBubble._chatSnapshot = workingGeo;
+  _lastBotBubble = botBubble;
 
   // Update map and listing — reset to default score view
   _activeGeojson = workingGeo;
@@ -680,8 +819,9 @@ function _applyChatResult(result) {
 
 function _onResetChatFilter() {
   if (!_currentGeojson) return;
-  _activeGeojson = _currentGeojson;
-  _chatHistory   = [];
+  _activeGeojson  = _currentGeojson;
+  _chatHistory    = [];
+  _lastBotBubble  = null;
 
   if (typeof window.updateRecommendationData === "function") {
     window.updateRecommendationData(_currentGeojson);
@@ -865,6 +1005,9 @@ if (resetBtn) {
 
     document.body.classList.remove("rating-stage");
     if (typeof window.stopOrbitCamera === "function") window.stopOrbitCamera();
+    _chatHistory     = [];
+    _chatLoadedProps = [];
+    _lastBotBubble   = null;
 
     if (typeof clearAllSources === "function") clearAllSources();
     if (typeof window.clearCharts === "function") window.clearCharts();
@@ -872,7 +1015,6 @@ if (resetBtn) {
     setTimeout(() => { if (window.map) window.map.resize(); }, 0);
     const chatCtrl = document.getElementById("chat-controls");
     if (chatCtrl) chatCtrl.remove();
-    if (outputBox) outputBox.classList.remove("has-chat-controls");
 
     if (outputBox) {
       outputBox.innerHTML = `

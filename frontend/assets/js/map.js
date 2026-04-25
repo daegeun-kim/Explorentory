@@ -245,6 +245,9 @@ let _orbitActive = false;
 let _orbitLon    = 0;
 let _orbitLat    = 0;
 
+// Last property the mouse hovered — used to initiate canvas drag-to-chat
+let _lastHoveredProp = null;
+
 //--------------------------------------------------------------------
 // Source / layer ids — survey step (all 10 properties shown at once)
 //--------------------------------------------------------------------
@@ -326,6 +329,32 @@ window.stopOrbitCamera = function () {
 map.on("mousedown",  () => window.stopOrbitCamera());
 map.on("wheel",      () => window.stopOrbitCamera());
 map.on("touchstart", () => window.stopOrbitCamera());
+
+// Canvas drag-to-chat: when the user drags while hovering over a property feature,
+// carry that property's data to the #chat-panel drop zone.
+// A lightweight ghost rectangle follows the cursor instead of the full map canvas.
+map.getCanvas().addEventListener("dragstart", (e) => {
+  if (!_lastHoveredProp) { e.preventDefault(); return; }
+  e.dataTransfer.setData("text/plain", JSON.stringify(_lastHoveredProp));
+  e.dataTransfer.effectAllowed = "copy";
+
+  const hood  = _lastHoveredProp.small_n || _lastHoveredProp.large_n || "Property";
+  const ghost = document.createElement("div");
+  ghost.style.cssText = [
+    "position:fixed", "top:-9999px", "left:-9999px",
+    "width:150px", "height:36px",
+    "background:#1e3a5f", "border:1px solid #4fc3f7",
+    "border-radius:8px", "display:flex", "align-items:center",
+    "justify-content:center", "gap:6px",
+    "color:#e0f7fa", "font-size:13px", "font-family:Roboto,sans-serif",
+    "font-weight:500", "padding:0 12px", "box-sizing:border-box",
+    "box-shadow:0 2px 8px rgba(0,0,0,0.5)",
+  ].join(";");
+  ghost.textContent = `▣ ${hood}`;
+  document.body.appendChild(ghost);
+  e.dataTransfer.setDragImage(ghost, 75, 18);
+  setTimeout(() => ghost.remove(), 0);
+});
 
 function clearAllSources() {
   window.stopOrbitCamera();
@@ -979,6 +1008,17 @@ function _attachExplainClickPopup(layerId) {
     const container = document.createElement("div");
     container.className = "explain-popup-inner";
 
+    // Drag handle — drag this to chat panel to load property into context
+    const dragHandle = document.createElement("div");
+    dragHandle.className = "map-prop-drag-handle";
+    dragHandle.draggable = true;
+    dragHandle.innerHTML = `<span>⠿</span><span>Drag to Chat</span>`;
+    dragHandle.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", JSON.stringify(props));
+      e.dataTransfer.effectAllowed = "copy";
+    });
+    container.appendChild(dragHandle);
+
     const btn = document.createElement("button");
     btn.className   = "explain-btn";
     btn.textContent = "Explain";
@@ -1013,6 +1053,10 @@ function _attachHoverTooltip(layerId) {
     if (!e.features.length) return;
     map.getCanvas().style.cursor = "pointer";
 
+    // Track for canvas drag-to-chat
+    _lastHoveredProp          = e.features[0].properties;
+    map.getCanvas().draggable = true;
+
     if (!_hoverPopup) {
       _hoverPopup = new maplibregl.Popup({
         closeButton: false,
@@ -1029,6 +1073,8 @@ function _attachHoverTooltip(layerId) {
 
   map.on("mouseleave", layerId, () => {
     map.getCanvas().style.cursor = "";
+    _lastHoveredProp          = null;
+    map.getCanvas().draggable = false;
     if (_hoverPopup) { _hoverPopup.remove(); _hoverPopup = null; }
   });
 }
@@ -1197,6 +1243,7 @@ function _attachMapEmptyClickHandler() {
     if (!hits.length) {
       clearMapBinFilter();
       clearPropertyHighlight();
+      if (_explainClickPopup) { _explainClickPopup.remove(); _explainClickPopup = null; }
     }
   });
 }

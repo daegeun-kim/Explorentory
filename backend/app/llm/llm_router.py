@@ -104,13 +104,43 @@ def explain_result(user_prefs: dict, priority_order: list, ols_coef: dict,
     return resp.output_text.strip()
 
 
-def chat_query(user_message: str, history: list) -> dict:
+def chat_query(user_message: str, history: list, properties: list = []) -> dict:
     """
     Process a chat message and return a structured JSON response.
     history: list of {"role": "user"|"assistant", "content": str}
+    properties: list of property dicts dragged into chat context (max 3)
     Returns parsed dict with "filters", "sort", or "message" key.
     """
     messages = [{"role": "system", "content": CHAT_SYSTEM_PROMPT}]
+
+    if properties:
+        prop_summaries = []
+        for i, p in enumerate(properties[:3]):
+            summary = {k: p[k] for k in (
+                "final_score",
+                "rent_knn", "sqft", "bedroomnum", "bathroomnum", "livingroomnum",
+                "elevator", "bld_story", "built_year", "borocode",
+                "large_n", "small_n", "noise_level_ord",
+                "dist_subway_ft", "dist_greenspace_ft", "dist_major_park_ft",
+                "bldg_class", "zoning",
+            ) if k in p and p[k] is not None}
+            prop_summaries.append({"property": i + 1, **summary})
+
+        messages.append({
+            "role": "system",
+            "content": (
+                "The user has loaded the following propert"
+                + ("y" if len(prop_summaries) == 1 else "ies")
+                + " into the chat for reference:\n"
+                + json.dumps(prop_summaries, ensure_ascii=False)
+                + "\n\nWhen the user says 'this property', 'similar to this', 'like this one', "
+                "or refers to a loaded property by number, use its column values to build "
+                "FILTER constraints. For 'similar': match borocode, bedroomnum, bathroomnum, "
+                "and use a ±20% rent range. Translate all column values into the correct "
+                "filter or sort output format."
+            ),
+        })
+
     for h in history:
         messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": user_message})

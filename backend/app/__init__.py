@@ -52,6 +52,7 @@ class ExplainResultPayload(BaseModel):
 class ChatPayload(BaseModel):
     message: str
     history: Optional[List[Dict[str, str]]] = []
+    properties: Optional[List[Dict[str, Any]]] = []
 
 
 @app.post("/explain")
@@ -160,7 +161,7 @@ def get_result_explanation(payload: ExplainResultPayload):
 def chat_with_llm(payload: ChatPayload):
     print(f"\n[API] POST /chat  message='{payload.message[:80]}'")
     try:
-        result = chat_query(payload.message, payload.history or [])
+        result = chat_query(payload.message, payload.history or [], payload.properties or [])
         print(f"[API] /chat done  keys={list(result.keys())}")
         return {"result": result, "error": None}
     except Exception as e:

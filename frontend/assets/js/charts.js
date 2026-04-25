@@ -931,11 +931,37 @@ function _drawRadarTriangle() {
     }
   }
 
+  // --- Compute bbox-centroid shift so the outer polygon is visually centered ---
+  // For a regular N-gon, cos is symmetric (dx=0) but sin may not be (odd N, top-starting).
+  // Shift drawCy so that the polygon's bounding-box centroid lands at cy.
+  const _sinVals = ANGLES.map(a => Math.sin(a));
+  const _sinMin  = Math.min(..._sinVals);
+  const _sinMax  = Math.max(..._sinVals);
+  // drawCy = cy - R*(sinMin+sinMax)/2  →  bbox_y_center = drawCy + R*(sinMin+sinMax)/2 = cy ✓
+  let drawCy = cy - R * (_sinMin + _sinMax) / 2;
+
+  // Re-tighten R for the shifted vertical center (horizontal constraints are unaffected since dx=0).
+  for (let i = 0; i < N; i++) {
+    const sinA   = _sinVals[i];
+    const th     = _textH[i];
+    const alignV  = sinA < -0.1 ? "bottom" : sinA > 0.1 ? "top" : "middle";
+    const extDown = alignV === "top"    ? th : alignV === "middle" ? th / 2 : 0;
+    const extUp   = alignV === "bottom" ? th : alignV === "middle" ? th / 2 : 0;
+    if (sinA > 0.001) {
+      R = Math.min(R, Math.max(1, (H - RADAR_MARGIN_BOTTOM - drawCy - RADAR_LABEL_PAD * sinA - extDown) / sinA));
+    }
+    if (sinA < -0.001) {
+      R = Math.min(R, Math.max(1, (drawCy - RADAR_MARGIN_TOP - RADAR_LABEL_PAD * (-sinA) - extUp) / (-sinA)));
+    }
+  }
+  // Recompute drawCy with the possibly-tightened R
+  drawCy = cy - R * (_sinMin + _sinMax) / 2;
+
   _radarR = R;
 
   const verts = ANGLES.map(a => ({
-    x: cx + R * Math.cos(a),
-    y: cy + R * Math.sin(a),
+    x: cx    + R * Math.cos(a),
+    y: drawCy + R * Math.sin(a),
   }));
 
   const rc = _chartColors();
@@ -955,7 +981,7 @@ function _drawRadarTriangle() {
   ctx.setLineDash(RADAR_GUIDE_DASH);
   for (const v of verts) {
     ctx.beginPath();
-    ctx.moveTo(cx, cy);
+    ctx.moveTo(cx, drawCy);
     ctx.lineTo(v.x, v.y);
     ctx.stroke();
   }
@@ -966,8 +992,8 @@ function _drawRadarTriangle() {
   ctx.textBaseline = "top";
   _activeRadarAxes.forEach((axis, i) => {
     const a       = ANGLES[i];
-    const lx      = cx + (R + RADAR_LABEL_PAD) * Math.cos(a);
-    const ly      = cy + (R + RADAR_LABEL_PAD) * Math.sin(a);
+    const lx      = cx    + (R + RADAR_LABEL_PAD) * Math.cos(a);
+    const ly      = drawCy + (R + RADAR_LABEL_PAD) * Math.sin(a);
     const poolIdx = RADAR_AXES_POOL.findIndex(p => p.key === axis.key);
     ctx.fillStyle = rc.radarAxisColors[poolIdx] || rc.radarAxisColors[0];
     const cosA    = Math.cos(a);
@@ -996,16 +1022,16 @@ function _drawRadarTriangle() {
     } else {
       score = (stat.max - val) / rng;
     }
-    score = Math.max(0, Math.min(1, score));
+    score = Math.max(0.2, Math.min(1, score));
     return {
-      x: cx + score * R * Math.cos(ANGLES[i]),
-      y: cy + score * R * Math.sin(ANGLES[i]),
+      x: cx    + score * R * Math.cos(ANGLES[i]),
+      y: drawCy + score * R * Math.sin(ANGLES[i]),
     };
   });
 
-  // Centroid of inner polygon (used to size the radial gradients)
-  const icx = innerVerts.reduce((s, v) => s + v.x, 0) / N;
-  const icy = innerVerts.reduce((s, v) => s + v.y, 0) / N;
+  // Bounding-box centroid of inner polygon (more stable than geometric centroid for asymmetric shapes)
+  const icx = (Math.min(...innerVerts.map(v => v.x)) + Math.max(...innerVerts.map(v => v.x))) / 2;
+  const icy = (Math.min(...innerVerts.map(v => v.y)) + Math.max(...innerVerts.map(v => v.y))) / 2;
 
   // Clip to inner polygon shape
   ctx.save();
