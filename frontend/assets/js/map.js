@@ -1356,12 +1356,19 @@ window.toggleMapStyle = function () {
   const savedBearing = map.getBearing();
 
   _currentStyleUrl = (_currentStyleUrl === STYLE_DARK) ? STYLE_BRIGHT : STYLE_DARK;
+  // diff:true (default) — only paint properties change, no tile reload, instant.
+  // "idle" is unreliable here because a paint-only diff may never leave the idle
+  // state, so the once("idle") handler never fires. Instead, use "styledata" which
+  // fires immediately after the diff is applied, then guard with isStyleLoaded().
   map.setStyle(_currentStyleUrl);
-  map.once("idle", () => {
+  function _onStyleToggleReady() {
+    if (!map.isStyleLoaded()) return;
+    map.off("styledata", _onStyleToggleReady);
     if (_activeView) _reapplyCurrentState();
-    // Restore camera immediately — jumpTo cancels any fitBounds animation
+    // Restore camera — jumpTo cancels any fitBounds animation from _reapplyCurrentState
     map.jumpTo({ center: savedCenter, zoom: savedZoom, pitch: savedPitch, bearing: savedBearing });
-  });
+  }
+  map.on("styledata", _onStyleToggleReady);
 };
 
 //--------------------------------------------------------------------

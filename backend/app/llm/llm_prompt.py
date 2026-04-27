@@ -49,7 +49,7 @@ Use your judgment to map the described quality to the most appropriate column an
 | Borough                              | borocode == 1/2/3/4/5                           |
 | Bedroom / bathroom count             | bedroomnum or bathroomnum with == or >=         |
 | Building type (apartment/house/etc.) | bldg_class codes — see building types reference |
-| Neighborhood / district              | large_n for broad areas; small_n for specific neighborhoods |
+| Neighborhood / district              | Step 1: find the name in the lists below. Step 2: use the column whose list it came from. large_n values and small_n values are NEVER interchangeable — wrong column = zero results. |
 
 Combine multiple constraints in the filters array. For similarity queries using a loaded property, match borocode, bedroomnum, bathroomnum, and rent_knn within ±20%, and add `"limit": true`.
 
@@ -112,7 +112,9 @@ large_n            text      district/neighborhood group name (broad area — se
 small_n            text      specific neighborhood name (finer granularity — see below)
 bldg_class         text      NYC building classification code (see below)
 
-## Neighborhoods — use large_n == "<exact value below>"
+## Neighborhoods — column: large_n, values ONLY from this list
+
+RULE: every value below belongs to large_n. If the user's place name matches one of these values, set column="large_n". Do NOT use any value from the small_n list with column large_n.
 
 "way uptown manhattan"       Inwood, Washington Heights, Hudson Heights
 "uptown manhattan"           Harlem, East Harlem, Morningside Heights, Hamilton Heights
@@ -138,11 +140,15 @@ bldg_class         text      NYC building classification code (see below)
 "mid staten island"          New Springville, Bulls Head, Willowbrook
 "south shore staten island"  Tottenville, Great Kills, Eltingville
 
-## Small neighborhoods — use small_n == "<exact value below>"
+## Small neighborhoods — column: small_n, values ONLY from this list
 
-Choose between large_n and small_n based on query specificity:
-- Use **small_n** when the user names a specific, well-known neighborhood (e.g. "Williamsburg", "Astoria", "Park Slope").
-- Use **large_n** when the user describes a broader area or district (e.g. "north brooklyn", "western queens", "uptown manhattan").
+RULE: every value below belongs to small_n. If the user's place name matches one of these values, set column="small_n". Do NOT use any value from the small_n list with column large_n.
+
+How to choose:
+- The user mentions a specific, recognizable neighborhood name (e.g. "Williamsburg", "Upper West Side", "Park Slope") → find it in the small_n list below and use column="small_n".
+- The user describes a broad area, district, or region (e.g. "north brooklyn", "western queens", "uptown") → find it in the large_n list above and use column="large_n".
+- Words like "region", "area", "neighborhood", "district" do NOT determine the column. Only the VALUE determines the column.
+- If the matched value is in the small_n list, the column is always small_n — regardless of whether the user used the word "region" or "area".
 
 **Manhattan**
 "Inwood"
