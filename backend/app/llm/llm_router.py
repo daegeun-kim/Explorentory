@@ -157,8 +157,16 @@ def chat_query(user_message: str, history: list, properties: list = []) -> dict:
         if raw.startswith("json"):
             raw = raw[4:]
         raw = raw.strip()
+    # If the model added preamble text before the JSON object, extract just the object
+    if not raw.startswith("{"):
+        start = raw.find("{")
+        end   = raw.rfind("}")
+        if start != -1 and end > start:
+            raw = raw[start:end + 1]
+    print(f"[llm] /chat raw → {raw[:200]}")
 
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
+        print(f"[llm] /chat JSONDecodeError on: {raw[:300]}")
         return {"message": "I have trouble understanding that. Could you rephrase your request?"}

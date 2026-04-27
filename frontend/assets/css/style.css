@@ -410,8 +410,8 @@ body {
   transition: background 0.15s, color 0.15s;
 }
 
-.chart2-tab:first-child { border-radius: 8px 0 0 8px; }
-.chart2-tab:last-child  { border-radius: 0 8px 8px 0; }
+.chart2-tab:first-child { border-radius: 12px 0 0 12px; }
+.chart2-tab:last-child  { border-radius: 0 12px 12px 0; }
 
 .chart2-tab.active {
   background: var(--accent);
@@ -1575,8 +1575,9 @@ body.bright #chat-log { scrollbar-color: #999 #e0e4ea; }
   min-width: 105px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 2px;
+  justify-content: top;
+  margin-top: 2px;
+  gap: 4px;
   border-left: 1px solid var(--border-card);
   padding-left: 8px;
 }
@@ -1609,11 +1610,11 @@ body.bright #chat-log { scrollbar-color: #999 #e0e4ea; }
 }
 
 .top10-tag {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-label);
   background: var(--bg-message);
-  padding: 1px 5px;
-  border-radius: 4px;
+  padding: 2px 5px;
+  border-radius: 8px;
   white-space: nowrap;
 }
 
@@ -1833,7 +1834,7 @@ body.bright #histogram-tooltip {
   border: 1px solid var(--accent);
   background: transparent;
   color: var(--accent);
-  font-size: 16px;
+  font-size: 14px;
   font-family: "Roboto", sans-serif;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
@@ -1866,7 +1867,7 @@ body.bright #histogram-tooltip {
   border: 1px solid #66bb6a;
   background: transparent;
   color: #66bb6a;
-  font-size: 12px;
+  font-size: 14px;
   cursor: pointer;
   font-family: "Roboto", sans-serif;
   transition: background 0.15s, color 0.15s;
