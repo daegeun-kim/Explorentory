@@ -1317,7 +1317,7 @@ body.bright #top10-listing-wrap { scrollbar-color: #999 #e0e4ea; }
   padding-top: 8px;
   padding-bottom: 2px;
   gap: 6px;
-  transition: border-color 0.15s;
+  transition: height 0.35s ease, border-color 0.15s;
 }
 
 #chat-panel.drag-over {

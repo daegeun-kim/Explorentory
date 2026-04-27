@@ -47,6 +47,7 @@ class ExplainResultPayload(BaseModel):
     ols_coef: Dict[str, float]
     neighborhood: Optional[str] = ""
     concern: Optional[str] = ""
+    result_summary: Optional[Dict[str, Any]] = None
 
 
 class ChatPayload(BaseModel):
@@ -149,6 +150,7 @@ def get_result_explanation(payload: ExplainResultPayload):
             payload.ols_coef,
             payload.neighborhood,
             payload.concern,
+            payload.result_summary,
         )
         print(f"[API] /explain_result done ({len(text)} chars)")
         return {"explanation": text, "error": None}

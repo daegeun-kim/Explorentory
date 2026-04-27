@@ -217,6 +217,7 @@ window.onNeighborhoodSubmit = async function (neighborhood) {
 //--------------------------------------------------------------------
 async function _callExplain(propertyProps, containerEl) {
   if (!currentPreferences) return;
+  _expandChatPanel();
 
   const btn = containerEl.querySelector(".explain-btn");
   if (btn) btn.disabled = true;
@@ -632,12 +633,75 @@ function _chatShowSpinner() {
 }
 
 //--------------------------------------------------------------------
+// Chat panel expand — smoothly grows chat to 50% of output area on interaction
+//--------------------------------------------------------------------
+function _expandChatPanel() {
+  const chatPanel = document.getElementById("chat-panel");
+  if (!chatPanel || !outputBox) return;
+  const targetH  = Math.round(outputBox.offsetHeight * 0.5);
+  const currentH = chatPanel.offsetHeight;
+  if (currentH < targetH) {
+    chatPanel.style.height = targetH + "px";
+    const listingWrap = document.getElementById("top10-listing-wrap");
+    if (listingWrap) { listingWrap.style.flex = "1 1 0"; listingWrap.style.height = ""; }
+  }
+}
+
+//--------------------------------------------------------------------
 // Explain Result
 //--------------------------------------------------------------------
+function _buildResultSummary(geojson) {
+  const BORO = { 1: "Manhattan", 2: "Bronx", 3: "Brooklyn", 4: "Queens", 5: "Staten Island" };
+  const byBoro = {}, byHood = {};
+  const scores = [], rents = [];
+
+  for (const f of geojson.features) {
+    const p     = f.properties;
+    const score = Number(p.final_score) || 0;
+    const rent  = Number(p.rent_knn)    || 0;
+    const boro  = Number(p.borocode)    || 0;
+    const hood  = p.large_n || "unknown";
+
+    scores.push(score);
+    if (rent > 0) rents.push(rent);
+
+    if (!byBoro[boro]) byBoro[boro] = { name: BORO[boro] || `Boro ${boro}`, count: 0, scoreSum: 0, rentSum: 0 };
+    byBoro[boro].count++; byBoro[boro].scoreSum += score; byBoro[boro].rentSum += rent;
+
+    if (!byHood[hood]) byHood[hood] = { count: 0, scoreSum: 0 };
+    byHood[hood].count++; byHood[hood].scoreSum += score;
+  }
+
+  const boroList = Object.values(byBoro).map(d => ({
+    borough:   d.name,
+    count:     d.count,
+    avg_score: +(d.scoreSum / d.count).toFixed(3),
+    avg_rent:  Math.round(d.rentSum / d.count),
+  })).sort((a, b) => b.avg_score - a.avg_score);
+
+  const hoodList = Object.entries(byHood)
+    .filter(([, d]) => d.count >= 3)
+    .map(([name, d]) => ({ neighborhood: name, count: d.count, avg_score: +(d.scoreSum / d.count).toFixed(3) }))
+    .sort((a, b) => b.avg_score - a.avg_score);
+
+  const avg     = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+  const minOf   = arr => arr.length ? Math.min(...arr) : 0;
+  const maxOf   = arr => arr.length ? Math.max(...arr) : 0;
+  return {
+    total_properties: geojson.features.length,
+    score: { min: +minOf(scores).toFixed(3), max: +maxOf(scores).toFixed(3), avg: +avg(scores).toFixed(3) },
+    rent:  { min: Math.round(minOf(rents)),  max: Math.round(maxOf(rents)),  avg: Math.round(avg(rents)) },
+    by_borough: boroList,
+    top_neighborhoods:    hoodList.slice(0, 6),
+    bottom_neighborhoods: hoodList.slice(-6).reverse(),
+  };
+}
+
 async function _onExplainResult() {
-  if (!currentPreferences || !_currentOlsCoef) return;
+  if (!currentPreferences || !_currentOlsCoef || !_currentGeojson) return;
   const btn = document.getElementById("chat-explain-result-btn");
   if (btn) btn.disabled = true;
+  _expandChatPanel();
 
   const spinner = _chatShowSpinner();
   try {
@@ -647,6 +711,7 @@ async function _onExplainResult() {
       ols_coef:       _currentOlsCoef,
       neighborhood:   currentPreferences.neighborhood_name || "",
       concern:        currentPreferences.concern || "",
+      result_summary: _buildResultSummary(_currentGeojson),
     };
     const res  = await fetch(`${API_BASE}/explain_result`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -668,6 +733,7 @@ async function _onExplainResult() {
 //--------------------------------------------------------------------
 async function _onChatSend(msg) {
   if (!_currentGeojson) return;
+  _expandChatPanel();
 
   // Capture and commit staged prop bubbles before the user message
   const propsToSend = [..._chatLoadedProps];

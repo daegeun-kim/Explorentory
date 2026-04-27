@@ -49,11 +49,11 @@ def explain_property(user_prefs: dict, property_info: dict) -> str:
 
 
 def explain_result(user_prefs: dict, priority_order: list, ols_coef: dict,
-                neighborhood: str, concern: str) -> str:
-    """Return a 3-5 sentence plain-text explanation of what the ML model learned
-    from the user's survey ratings, framed in terms of preferences."""
+                neighborhood: str, concern: str, result_summary: dict = None) -> str:
+    """Return a 3-5 sentence plain-text explanation of the filtered recommendation results,
+    covering which regions scored well, what features mattered, and non-obvious patterns."""
 
-    # Sort coefficients by absolute magnitude for the prompt
+    # Sort coefficients by absolute magnitude
     sorted_coef = sorted(ols_coef.items(), key=lambda x: abs(x[1]), reverse=True)
     coef_lines = "\n".join(f"  {k}: {v:+.4f}" for k, v in sorted_coef)
 
@@ -61,40 +61,40 @@ def explain_result(user_prefs: dict, priority_order: list, ols_coef: dict,
         {
             "role": "system",
             "content": (
-                "You are a friendly NYC rental advisor. "
-                "Based on OLS regression coefficients from the user's property ratings compared to user preference and priority, "
-                "write 2-4 sentences telling the user what their survey revealed about their preferences. "
-                "Speak directly to the user in plain conversational English — no numbers, no coefficient values, no technical terms. "
-                "Focus only on the top 1-2 noticeably influential features (highest absolute coefficient) except rent, location, sqft, room counts. "
-                "Mention rent, location, sqft, room counts if one of them are considered less important from the survey."
-                "Translate feature names: rent_knn=rent, sqft=apartment size, bedroomnum_diff=bedroom match, "
-                "bathroomnum_diff=bathroom match, borocode_match=staying in same borough, "
-                "built_year_diff=building age, bld_story_diff=number of floors, elevator=elevator access, "
-                "dist_greenspace_ft=proximity to parks, dist_subway_ft=subway access, noise_level_ord=noise level. "
-                "Positive coefficient = user preferred more/higher; negative = preferred less/lower. "
-                "For _diff features, negative coefficient means the user disliked deviating from their stated preference. "
-                "Plain text only — no bullet points, no numbers, no JSON."
+                "You are a friendly NYC rental advisor summarizing the results of a personalized property recommendation. "
+                "Write 3-5 sentences in plain conversational English directly to the user. "
+                "Your goal is to tell them what the recommendation learned and where the best-matching properties ended up.\n\n"
+                "Cover these points, but only if interesting:\n"
+                "1. Which borough or neighborhood areas scored highest and why (based on the result_summary data).\n"
+                "2. Any area or feature that scored notably lower than expected — worth mentioning if surprising.\n"
+                "3. One or two non-obvious insights from the OLS coefficients: things the user's survey revealed that go beyond "
+                "   the obvious (e.g. not 'you prefer cheaper rent' — that is always true and adds no value). "
+                "   Focus on secondary features like noise tolerance, park proximity, building age, elevator, floor count — "
+                "   anything that reveals something the user may not have realized about their own priorities.\n\n"
+                "Do NOT mention: coefficient values, numbers, technical terms, or the word 'coefficient'. "
+                "Do NOT state the obvious (rent preference, basic bedroom/bathroom match). "
+                "Feature name translation: rent_knn=rent, sqft=apartment size, bedroomnum_diff=bedroom fit, "
+                "bathroomnum_diff=bathroom fit, borocode_match=borough match, built_year_diff=building age preference, "
+                "bld_story_diff=floor count preference, elevator=elevator access, dist_greenspace_ft=proximity to green space, "
+                "dist_subway_ft=subway proximity, noise_level_ord=noise sensitivity. "
+                "Positive coefficient = user preferred more/higher of that feature; negative = preferred less. "
+                "For _diff features, a strong negative means the user cared a lot about matching their stated preference exactly. "
+                "Plain text only — no bullet points, no headers, no JSON."
             ),
         },
         {
             "role": "user",
             "content": json.dumps({
                 "user_preferences": {
-                    "target_rent":   user_prefs.get("rent"),
-                    "bedrooms":      user_prefs.get("bedrooms"),
-                    "bathrooms":     user_prefs.get("bathrooms"),
+                    "target_rent":    user_prefs.get("rent"),
+                    "bedrooms":       user_prefs.get("bedrooms"),
+                    "bathrooms":      user_prefs.get("bathrooms"),
                     "priority_order": priority_order,
-                    "neighborhood":  neighborhood,
-                    "concern":       concern,
+                    "neighborhood":   neighborhood,
+                    "concern":        concern,
                 },
                 "ols_coefficients_by_importance": coef_lines,
-                "interpretation_guide": (
-                    "rent_knn: monthly rent; sqft: size; bedroomnum_diff: bedroom match; "
-                    "bathroomnum_diff: bathroom match; borocode_match: same borough; "
-                    "built_year_diff: building age preference; bld_story_diff: floor count preference; "
-                    "elevator: has elevator; dist_greenspace_ft: proximity to parks; "
-                    "dist_subway_ft: proximity to subway; noise_level_ord: noise (0=very low, 4=very high)"
-                ),
+                "result_summary": result_summary or {},
             }, ensure_ascii=False),
         },
     ]
