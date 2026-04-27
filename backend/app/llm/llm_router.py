@@ -19,7 +19,7 @@ def explain_property(user_prefs: dict, property_info: dict) -> str:
             "role": "system",
             "content": (
                 "You are a concise NYC rental advisor explaining to someone looking for a property to rent. "
-                "In 2-3 sentences explain how well the property matches the user's needs. "
+                "In concise 2-3 sentences explain how well the property matches the user's needs. "
                 "Plain text only, either in paragraph or bullet point."
             ),
         },
@@ -62,7 +62,7 @@ def explain_result(user_prefs: dict, priority_order: list, ols_coef: dict,
             "role": "system",
             "content": (
                 "You are a friendly NYC rental advisor summarizing the results of a personalized property recommendation. "
-                "Write 3-5 sentences in plain conversational English directly to the user. "
+                "Write concise 2-5 sentences in plain conversational English directly to the user. "
                 "Your goal is to tell them what the recommendation learned and where the best-matching properties ended up.\n\n"
                 "Cover these points, but only if interesting:\n"
                 "1. Which borough or neighborhood areas scored highest and why (based on the result_summary data).\n"

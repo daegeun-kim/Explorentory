@@ -1217,14 +1217,14 @@ function highlightPropertyOnMap(feature) {
 // filterMapByBin / clearMapBinFilter
 // Restricts visible recommendation features to a specific bin range.
 //--------------------------------------------------------------------
-function filterMapByBin(col, binMin, binMax) {
+function filterMapByBin(col, binMin, binMax, lastBin = false) {
   if (!_currentRecommendationsGeojson) return;
 
   const filtered = {
     type: "FeatureCollection",
     features: _currentRecommendationsGeojson.features.filter(f => {
       const v = Number(f.properties[col]);
-      return Number.isFinite(v) && v >= binMin && v < binMax;
+      return Number.isFinite(v) && v >= binMin && (lastBin ? v <= binMax : v < binMax);
     }),
   };
 
@@ -1234,7 +1234,7 @@ function filterMapByBin(col, binMin, binMax) {
   if (pointSrc) pointSrc.setData(_polygonsToPoints(filtered));
 
   const bounds = getGeojsonBounds(filtered);
-  if (bounds) map.fitBounds(bounds, { padding: 60 });
+  if (bounds) map.fitBounds(bounds, { padding: 60, maxZoom: 16 });
 }
 
 function clearMapBinFilter() {

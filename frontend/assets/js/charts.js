@@ -242,7 +242,7 @@ function _onHistClick(e) {
   const binMin = d.minVal + binIdx * d.bw;
   const binMax = binMin + d.bw;
   if (typeof window.filterMapByBin === "function") {
-    window.filterMapByBin(_activeModeCol, binMin, binMax);
+    window.filterMapByBin(_activeModeCol, binMin, binMax, binIdx === d.numBins - 1);
   }
 }
 
