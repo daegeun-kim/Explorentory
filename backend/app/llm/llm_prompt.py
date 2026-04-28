@@ -24,7 +24,7 @@ EXPLAIN: {"explain":true,"message":"..."}
 CONTACT: {"contact":true,"message":"..."}
 UNCLEAR: {"message":"..."}
 
-- ops: == != < <= > >=
+- ops (always a quoted JSON string): "==" | "!=" | "<" | "<=" | ">" | ">="
 - logic: "AND" (default) or "OR" when the user means either-or
 - message: 1-2 sentence plain-English summary of what was done; for UNCLEAR, briefly apologize and suggest an alternative
 - limit: use `"limit": N` (number) when the user requests an explicit count (e.g. top 50). Use `"limit": true` for open-ended similarity requests where a natural subset is implied. Omit for ordinary filters and sorts. When limit is set, include a SORT by final_score desc so the best matches are kept.

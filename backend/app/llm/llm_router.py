@@ -1,4 +1,5 @@
 import os
+import re
 import json
 
 from openai import OpenAI
@@ -134,11 +135,21 @@ def chat_query(user_message: str, history: list, properties: list = []) -> dict:
                 + ("y" if len(prop_summaries) == 1 else "ies")
                 + " into the chat for reference:\n"
                 + json.dumps(prop_summaries, ensure_ascii=False)
-                + "\n\nWhen the user says 'this property', 'similar to this', 'like this one', "
-                "or refers to a loaded property by number, use its column values to build "
-                "FILTER constraints. For 'similar': match borocode, bedroomnum, bathroomnum, "
-                "and use a ±20% rent range. Translate all column values into the correct "
-                "filter or sort output format."
+                + "\n\nUse these property values as context for any user request that references "
+                "a loaded property — whether finding similar ones, expressing dislike, "
+                "requesting a specific feature, comparing, or any other relation. "
+                "Infer which columns to filter or sort on from what the user actually emphasizes. "
+                "Examples of intent-to-column mapping (illustrative, not exhaustive): "
+                "'similar price / same rent' → rent_knn range ±20%; "
+                "'same area / neighborhood' → small_n ==; "
+                "'same building type / style' → bldg_class ==; "
+                "'with elevator' → elevator == 1; "
+                "'quieter' → noise_level_ord <; "
+                "'closer to subway' → dist_subway_ft <; "
+                "'I don't like this one, show me others' → exclude a feature using '!=' "
+                "When the user asks for similar properties without specifying what aspect, "
+                "default to matching small_n (same neighborhood) and rent_knn (±10% range). "
+                "Always translate inferred intent into the correct filter or sort JSON format."
             ),
         })
 
@@ -164,6 +175,10 @@ def chat_query(user_message: str, history: list, properties: list = []) -> dict:
         if start != -1 and end > start:
             raw = raw[start:end + 1]
     print(f"[llm] /chat raw → {raw[:200]}")
+
+    # LLMs sometimes drop the colon and/or opening quote before comparison operators,
+    # producing "op">=" instead of "op":">=".  Repair before parsing.
+    raw = re.sub(r'"op"\s*:?\s*(==|!=|>=|<=|>|<)\s*"', r'"op":"\1"', raw)
 
     try:
         return json.loads(raw)
