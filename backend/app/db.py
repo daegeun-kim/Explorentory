@@ -113,7 +113,7 @@ def get_filtered_properties(
         AND   bedroomnum  BETWEEN :min_bed  AND :max_bed
         AND   bathroomnum BETWEEN :min_bath AND :max_bath
         ORDER BY RANDOM()
-        LIMIT 200000
+        LIMIT 100000
     """)
     params = {
         "min_rent": min_rent, "max_rent": max_rent,

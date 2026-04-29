@@ -125,7 +125,7 @@ const FIT_PADDING_NEIGHBORHOODS   = 40;   // all neighborhoods
 const FIT_PADDING_RECOMMENDATIONS = 40;   // top-N results
 
 // Max zoom when fitting to a single property (prevents zooming into one building footprint)
-const SINGLE_PROP_MAX_ZOOM = 13;
+const SINGLE_PROP_MAX_ZOOM = 14;
 
 // Speed multiplier for fitBounds during survey step (faster transitions between properties)
 const SINGLE_PROP_FIT_SPEED = 4;
@@ -300,7 +300,7 @@ function _startOrbitCamera(lon, lat) {
   if (lon !== undefined) { _orbitLon = lon; _orbitLat = lat; }
   _orbitActive = true;
   if (_orbitRAF) cancelAnimationFrame(_orbitRAF);
-  const DEGREES_PER_SEC = 12;
+  const DEGREES_PER_SEC = 8;
   let lastTime = null;
   function _step(ts) {
     if (!_orbitActive) return;
@@ -820,7 +820,7 @@ function showAllSurveyPropertiesOnMap(properties) {
 
     // Fit map to show all survey properties
     const surveyBounds = getGeojsonBounds(geojson);
-    if (surveyBounds) map.fitBounds(surveyBounds, { padding: FIT_PADDING_RECOMMENDATIONS, maxZoom: 13 });
+    if (surveyBounds) map.fitBounds(surveyBounds, { padding: FIT_PADDING_RECOMMENDATIONS, maxZoom: 14 });
 
     // Map click on any survey layer → activate the corresponding card
     [surveyCircleId, surveyFillId, surveyExtId].forEach(layerId => {

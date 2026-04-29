@@ -114,41 +114,39 @@ bldg_class         text      NYC building classification code (see below)
 
 ## Neighborhoods — column: large_n, values ONLY from this list
 
-RULE: every value below belongs to large_n. If the user's place name matches one of these values, set column="large_n". Do NOT use any value from the small_n list with column large_n.
+RULE: large_n values are always lowercase multi-word phrases (e.g., "uptown manhattan", "north brooklyn").
+Proper-case neighborhood names like "Morningside Heights" or "Park Slope" are NEVER large_n values — they are always small_n.
+If the user says a proper-case neighborhood name, do NOT look here — look in the small_n list below.
 
-"way uptown manhattan"       Inwood, Washington Heights, Hudson Heights
-"uptown manhattan"           Harlem, East Harlem, Morningside Heights, Hamilton Heights
-"midtown manhattan"          Midtown, Hell's Kitchen, Chelsea, Murray Hill, Gramercy, Kips Bay, Hudson Yards, Upper West Side, Upper East Side, Yorkville, Lenox Hill
-"downtown manhattan"         SoHo, Tribeca, Financial District, LES, Chinatown, Greenwich Village, West Village, NoHo, Nolita, Battery Park City
-"central bronx"              Fordham, Belmont, Tremont, University Heights
-"west bronx"                 Riverdale, Kingsbridge, Norwood, Bedford Park
-"east bronx"                 Pelham Bay, Morris Park, Throggs Neck, Parkchester
-"south bronx"                Mott Haven, Hunts Point, Melrose, Longwood
-"north brooklyn"             Williamsburg, Greenpoint, DUMBO, Brooklyn Heights, Boerum Hill, Park Slope, Fort Greene, Clinton Hill, Bushwick
-"south brooklyn"             Bay Ridge, Dyker Heights, Bensonhurst, Borough Park, Sunset Park, Red Hook
-"central brooklyn"           Crown Heights, Flatbush, Prospect Heights, Windsor Terrace, Kensington
-"east brooklyn"              Brownsville, East New York, Canarsie, Flatlands, East Flatbush
-"western queens"             Long Island City, Astoria, Sunnyside, Woodside, Jackson Heights, Elmhurst, Maspeth
-"northwest queens"           College Point, Whitestone, Bayside, Flushing, Ditmars, Steinway
-"central queens"             Forest Hills, Rego Park, Kew Gardens, Jamaica, Richmond Hill
-"northeast queens"           Fresh Meadows, Auburndale, Queensboro Hill
-"southeast queens"           Hollis, St. Albans, Springfield Gardens, Laurelton, Rosedale
-"rockaways queens"           Rockaway Beach, Far Rockaway, Arverne
-"special queens"             Howard Beach, Ozone Park, Woodhaven
-"north shore staten island"  St. George, New Brighton, Stapleton
-"east shore staten island"   South Beach, Rosebank, Arrochar
-"mid staten island"          New Springville, Bulls Head, Willowbrook
-"south shore staten island"  Tottenville, Great Kills, Eltingville
+"way uptown manhattan"
+"uptown manhattan"
+"midtown manhattan"
+"downtown manhattan"
+"central bronx"
+"west bronx"
+"east bronx"
+"south bronx"
+"north brooklyn"
+"south brooklyn"
+"central brooklyn"
+"east brooklyn"
+"western queens"
+"northwest queens"
+"central queens"
+"northeast queens"
+"southeast queens"
+"rockaways queens"
+"special queens"
+"north shore staten island"
+"east shore staten island"
+"mid staten island"
+"south shore staten island"
 
 ## Small neighborhoods — column: small_n, values ONLY from this list
 
-RULE: every value below belongs to small_n. If the user's place name matches one of these values, set column="small_n". Do NOT use any value from the small_n list with column large_n.
-
-How to choose:
-- The user mentions a specific, recognizable neighborhood name (e.g. "Williamsburg", "Upper West Side", "Park Slope") → find it in the small_n list below and use column="small_n".
-- The user describes a broad area, district, or region (e.g. "north brooklyn", "western queens", "uptown") → find it in the large_n list above and use column="large_n".
-- Words like "region", "area", "neighborhood", "district" do NOT determine the column. Only the VALUE determines the column.
-- If the matched value is in the small_n list, the column is always small_n — regardless of whether the user used the word "region" or "area".
+RULE: small_n values are always proper-case neighborhood names (e.g., "Morningside Heights", "Park Slope", "Williamsburg").
+If the user's place name matches any value in this list, set column="small_n" — regardless of whether they used words like "region" or "area".
+Never pair a proper-case name from this list with column="large_n".
 
 **Manhattan**
 "Inwood"
